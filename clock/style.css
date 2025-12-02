@@ -1,68 +1,80 @@
-html, body {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  padding: 0px;
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0px;
 }
 
 body {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background-color: #000000;
-  background: #000000;
-  background-repeat: no-repeat;
-  color: #FFF;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #111;
+    background-repeat: no-repeat;
+    color: #FFF;
+    overflow: hidden;
+    cursor: pointer;
 }
 
-.vline
-{
-    position:fixed;
+/* Spider Canvas Background */
+#canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -2;
+}
+
+.vline {
+    position: fixed;
     top: 0;
     left: 50%;
     height: 50vh;
     width: 2px;
     background-color: #FFF;
-    z-index: -1;
+    z-index: 0;
     opacity: 0.5;
-    visibility: hidden;
+    visibility: visible;
 }
+
 .gsapWrapper {
+    visibility: visible;
+    position: relative;
+    z-index: 1;
+}
 
-  visibility: hidden;
-
-  #wBody {
-
+#wBody {
     position: relative;
     aspect-ratio: 1/1;
+}
 
-    @media (orientation: landscape) {
-      width: 65vh;
+@media (orientation: landscape) {
+    #wBody {
+        width: 65vh;
     }
-    @media (orientation: portrait) {
-      height: 65vw;
+}
+
+@media (orientation: portrait) {
+    #wBody {
+        height: 65vw;
     }
+}
 
+#watch {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    height: 100%;
+    aspect-ratio: 1/1;
+    overflow: visible;
+}
 
-    #watch {
-      
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 100%;
-      height: 100%;
-      aspect-ratio: 1/1;
-      overflow: visible;
-
-      svg {
-        overflow: visible;
-        width: 100%;
-        height: 100%;
-      }
-      
-    }
-
-  }
-
+#watch svg {
+    overflow: visible;
+    width: 100%;
+    height: 100%;
 }
