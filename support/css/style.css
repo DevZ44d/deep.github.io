@@ -1,0 +1,98 @@
+body {
+    font-family: "Space Mono", monospace;
+}
+
+footer {
+    position: relative;
+    left: 0;
+    margin-top: 5vh;
+    bottom: 1vh;
+    width: 100%;
+    text-align: center;
+}
+
+@keyframes blinking {
+    0% {
+        border-right-color: transparent;
+    }
+
+    50% {
+        border-right-color: hsl(205, 16%, 77%);
+    }
+
+    100% {
+        border-right-color: transparent;
+    }
+}
+
+#typing {
+    width: 0;
+    animation: blinking 1s infinite;
+    cursor: text;
+}
+
+.typing {
+    border-right: 2px solid hsl(205, 16%, 77%);
+}
+
+.title {
+    margin-top: 50px;
+    font-size: 100px;
+}
+
+.github-logo {
+    height: 32px;
+}
+
+.pyro-worker {
+    height: 100px;
+}
+
+@media (max-width: 768px) {
+    .pyro-worker {
+        height: 75px;
+    }
+
+    .title {
+        font-size: 75px;
+    }
+
+    footer {
+        position: fixed;
+    }
+}
+
+@media (min-width: 768px) {
+    .container {
+        width: 700px;
+    }
+}
+
+@media (max-height: 620px) {
+    footer {
+        visibility: hidden;
+    }
+}
+
+html, body {
+    height: 100%; /* �仂仍仆舒� 于��仂�舒 亟仂从�仄亠仆�舒 */
+    margin: 0; /* 丕弍亳�舒亠仄 ��舒仆亟舒��仆�亠 仂����仗� */
+    display: flex;
+    flex-direction: column;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh; 
+}
+
+main {
+    flex: 1;
+}
+
+.dark-tooltip::before {
+    color: hsl(205, 16%, 77%);
+    background-color: hsl(205, 16%, 14%);
+    cursor: pointer;
+}
