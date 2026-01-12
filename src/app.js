@@ -1,3 +1,10 @@
+window.onblur = () => {
+        document.title = "Why do you Leave?";
+}
+
+window.onfocus = () => {
+        document.title = "глубокий | Deep";
+}
 const image = document.querySelector('.image');
 const hover = document.querySelector('.hover');
 const modal = document.querySelector('.modal');
