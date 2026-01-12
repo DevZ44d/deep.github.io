@@ -1,3 +1,11 @@
+window.onblur = () => {
+        document.title = "Why do you Leave?";
+}
+
+window.onfocus = () => {
+        document.title = "Паук | Clock";
+}
+
 window.addEventListener('load', function () {
     const canvas = document.getElementById("canvas");
     if (!canvas) {
