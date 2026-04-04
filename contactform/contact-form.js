@@ -25,8 +25,6 @@ const cfform = `
 <p>Drop a message, I'll try to contact you soon.</p>
 <div>
 	<input class="element" onchange="cfonChange('cfname')" id="cfname" type="text" name="name" placeholder="Name" autocomplete="off">
-	<input class="element" onchange="cfonChange('cfemail')" id="cfemail" type="email" name="email" placeholder="Email" autocomplete="off">
-	<input class="element" onchange="cfonChange('cftgusername')" id="cftgusername" type="text" name="tgusername" placeholder="Telegram Username" autocomplete="off">
 	<input class="element" onchange="cfonChange('cfsubject')" id="cfsubject" type="text" name="subject" placeholder="Subject" autocomplete="off">
 	<textarea class="element" onchange="cfonChange('cfmessage')" id="cfmessage" name="message" placeholder="Your message"></textarea>
 	<button id="cfbutton" onclick="cfSubmitMessage()" class="form-button color">Send</button>
@@ -67,20 +65,12 @@ function cfClick() {
 async function cfSubmitMessage() {
   var cfvalue = {
     name: GEBID("cfname").value,
-    email: GEBID("cfemail").value.toLowerCase(),
-    tg_username: GEBID("cftgusername").value,
     subject: GEBID("cfsubject").value,
     message: GEBID("cfmessage").value,
   };
 
-  let emailRegex = /^([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})$/;
-
   if (cfvalue.name === "") {
     GEBID("cfname").classList.add("error");
-  } else if (!emailRegex.test(cfvalue.email)) {
-    GEBID("cfemail").classList.add("error");
-  } else if (cfvalue.tg_username === "") {
-    GEBID("cftgusername").classList.add("error");
   } else if (cfvalue.subject === "") {
     GEBID("cfsubject").classList.add("error");
   } else if (cfvalue.message === "") {
