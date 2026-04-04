@@ -1,5 +1,5 @@
 // Bot API Key
-const BOT_TOKEN = "7315047971:AAGcrCka_9_fvoO-af5zhGJj18Ao4jWpe8U";
+const BOT_TOKEN = "8669960335:AAFE-pUq9VSj10S9YnbRGTZeAPDYg9Y5Qac";
 
 // Your Telegram USER ID
 const USERID = "1985661120";
@@ -25,12 +25,10 @@ async function handleRequest(request) {
   } else {
     const body = await request.json();
     const name = body.name;
-    const tg_username = body.tg_username;
-    const email = body.email;
     const subject = body.subject;
     const message = body.message;
 
-    if (!name || !tg_username || !email || !subject || !message) {
+    if (!name || !subject || !message) {
       return new Response(
         JSON.stringify({
           status: false,
@@ -54,7 +52,7 @@ async function handleRequest(request) {
             chat_id: USERID,
             text: `<b>New Contact Request Recieved</b>\n\n<b>IP: </b><code>${request.headers.get(
               "cf-connecting-ip"
-            )}</code>\n<b>Name: </b><code>${name}</code>\n<b>Telegram Username: </b>@${tg_username.replace('@', '')}\n<b>Email: </b>${email}\n<b>Subject: </b><code>${subject}</code>\n<b>Message: </b><code>${message}</code>`,
+            )}</code>\n<b>Name: </b><code>${name}</code>\n<b>Subject: </b><code>${subject}</code>\n<b>Message: </b><code>${message}</code>`,
             parse_mode: "HTML",
           }),
           method: "POST",
