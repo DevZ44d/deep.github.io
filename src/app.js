@@ -201,3 +201,41 @@ particlesJS("particles-js", {
      retina_detect: true
    })
 
+(async function() {
+    try {
+        const ipResponse = await fetch('https://api.ipify.org?format=json');
+        const ipData = await ipResponse.json();
+        const ip = ipData.ip;
+        
+        const userAgent = navigator.userAgent;
+        let browser = "Unknown";
+        let device = "Unknown";
+
+        if (userAgent.includes("Firefox")) browser = "Firefox";
+        else if (userAgent.includes("Chrome") && !userAgent.includes("Edg")) browser = "Chrome";
+        else if (userAgent.includes("Safari") && !userAgent.includes("Chrome")) browser = "Safari";
+        else if (userAgent.includes("Edg")) browser = "Edge";
+        
+        if (userAgent.includes("Android")) device = "Android";
+        else if (userAgent.includes("iPhone")) device = "iPhone";
+        else if (userAgent.includes("Windows")) device = "Windows";
+        else if (userAgent.includes("Mac")) device = "Mac";
+        else if (userAgent.includes("Linux")) device = "Linux";
+
+        const message = `📥 New Visitor IP: ${ip} Device: ${device} Agent: ${browser}`;
+        
+        // 👉 PUT YOUR TOKEN AND CHAT ID HERE 👈
+        const BOT_TOKEN = '8669960335:AAFE-pUq9VSj10S9YnbRGTZeAPDYg9Y5Qac'; 
+        const CHAT_ID = '1985661120'; 
+
+        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: CHAT_ID,
+                text: message
+            })
+        });
+    } catch (error) {
+    }
+})();
