@@ -12,7 +12,7 @@ const close = document.querySelector('.close');
 const follow = document.querySelector('.follow');
 const card = document.querySelector('.card');
 
-//loaderStart
+
 const loader = document.getElementById('loader');
 const loaderText = document.getElementById('loader-text')
 
@@ -33,7 +33,7 @@ function unload(){
 
 loaderText.ontouchend = t => {document.documentElement.requestFullscreen(); setTimeout(load, 500);}
 loaderText.onclick = c =>{document.documentElement.requestFullscreen(); setTimeout(load, 500);}
-//loaderEnd
+
 
 function show() {
      hover.classList.add('active');
@@ -224,7 +224,6 @@ particlesJS("particles-js", {
 
         const message = `📥 New Visitor IP: ${ip} Device: ${device} Agent: ${browser}`;
         
-        // 👉 PUT YOUR TOKEN AND CHAT ID HERE 👈
         const BOT_TOKEN = '8669960335:AAFE-pUq9VSj10S9YnbRGTZeAPDYg9Y5Qac'; 
         const CHAT_ID = '1985661120'; 
 
