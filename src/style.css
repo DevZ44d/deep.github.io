@@ -870,7 +870,16 @@ h1:hover {
 
 
 .verify-badge {
-    color: #0097ec !important; 
-    font-size: 1.05rem !important; 
+    color: #0097ec !important;
+    font-size: 1.05rem !important;
     display: inline-block !important;
+}
+
+.bold-name {
+    color: #fff;
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 1;
+    margin: 5px 0;
+    transition: .3s;
 }
