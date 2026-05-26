@@ -1,17 +1,17 @@
 const profileImages = [
-    "photo_2025-02-24_13-52-46.jpg",
-    "photo_2025-04-30_03-02-36.jpg",
-    "photo_2025-05-12_21-20-37.jpg",
-    "photo_2025-12-07_21-49-03.jpg",
-    "photo_2026-02-25_19-10-08.jpg",
-    "photo_2026-03-26_11-26-56.jpg",
-    "photo_2026-04-08_23-59-50.jpg",
-    "photo_2026-04-24_12-00-04.jpg",
-    "photo_2026-04-30_03-02-36.jpg",
-    "photo_2026-05-10_13-35-52.jpg",
-    "photo_2026-05-11_18-59-30.jpg",
-    "photo_2026-05-26_09-22-32.jpg",
-    "imgg.png"
+    "profile_1.jpg",
+    "profile_2.jpg",
+    "profile_3.jpg",
+    "profile_4.jpg",
+    "profile_5.jpg",
+    "profile_6.jpg",
+    "profile_7.jpg",
+    "profile_8.jpg",
+    "profile_9.jpg",
+    "profile_10.jpg",
+    "profile_11.jpg",
+    "profile_12.jpg",
+    "profile_13.jpg"
 ];
 
 
@@ -33,22 +33,27 @@ const close = document.querySelector('.close');
 const follow = document.querySelector('.follow');
 const card = document.querySelector('.card');
 
-
 if (image) {
     image.style.backgroundImage = `url('profiles/${selectedImage}')`;
 }
 
 const loader = document.getElementById('loader');
 const loaderText = document.getElementById('loader-text');
+let isModalImageSet = false;
 
 function show() {
-     const randomModalIndex = Math.floor(Math.random() * profileImages.length);
-     const selectedModalImage = profileImages[randomModalIndex];
-     
-     const modalImg = document.querySelector('.modal img');
-     if (modalImg) {
-          modalImg.src = `profiles/${selectedModalImage}`;
+     if (!isModalImageSet) {
+          const randomModalIndex = Math.floor(Math.random() * profileImages.length);
+          const selectedModalImage = profileImages[randomModalIndex];
+          
+          const modalImg = document.querySelector('.modal img');
+          if (modalImg) {
+               modalImg.src = `profiles/${selectedModalImage}`;
+          }
+
+          isModalImageSet = true;
      }
+
 
      hover.classList.add('active');
      modal.classList.add('show');
