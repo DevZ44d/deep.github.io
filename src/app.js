@@ -1,3 +1,23 @@
+const profileImages = [
+    "photo_2025-02-24_13-52-46.jpg",
+    "photo_2025-04-30_03-02-36.jpg",
+    "photo_2025-05-12_21-20-37.jpg",
+    "photo_2025-12-07_21-49-03.jpg",
+    "photo_2026-02-25_19-10-08.jpg",
+    "photo_2026-03-26_11-26-56.jpg",
+    "photo_2026-04-08_23-59-50.jpg",
+    "photo_2026-04-24_12-00-04.jpg",
+    "photo_2026-04-30_03-02-36.jpg",
+    "photo_2026-05-10_13-35-52.jpg",
+    "photo_2026-05-11_18-59-30.jpg",
+    "photo_2026-05-26_09-22-32.jpg",
+    "imgg.png"
+];
+
+
+const randomIndex = Math.floor(Math.random() * profileImages.length);
+const selectedImage = profileImages[randomIndex];
+
 window.onblur = () => {
         document.title = "Why do you Leave?";
 }
@@ -5,6 +25,7 @@ window.onblur = () => {
 window.onfocus = () => {
         document.title = "глубокий | Deep";
 }
+
 const image = document.querySelector('.image');
 const hover = document.querySelector('.hover');
 const modal = document.querySelector('.modal');
@@ -13,8 +34,25 @@ const follow = document.querySelector('.follow');
 const card = document.querySelector('.card');
 
 
+if (image) {
+    image.style.backgroundImage = `url('profiles/${selectedImage}')`;
+}
+
 const loader = document.getElementById('loader');
-const loaderText = document.getElementById('loader-text')
+const loaderText = document.getElementById('loader-text');
+
+function show() {
+     const randomModalIndex = Math.floor(Math.random() * profileImages.length);
+     const selectedModalImage = profileImages[randomModalIndex];
+     
+     const modalImg = document.querySelector('.modal img');
+     if (modalImg) {
+          modalImg.src = `profiles/${selectedModalImage}`;
+     }
+
+     hover.classList.add('active');
+     modal.classList.add('show');
+}
 
 function load(){
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890';
@@ -33,12 +71,6 @@ function unload(){
 
 loaderText.ontouchend = t => {document.documentElement.requestFullscreen(); setTimeout(load, 500);}
 loaderText.onclick = c =>{document.documentElement.requestFullscreen(); setTimeout(load, 500);}
-
-
-function show() {
-     hover.classList.add('active');
-     modal.classList.add('show');
-}
 
 function hide() {
      hover.classList.remove('active');
@@ -199,4 +231,4 @@ particlesJS("particles-js", {
        }
      },
      retina_detect: true
-   })
+   });
