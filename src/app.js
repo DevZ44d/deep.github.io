@@ -15,6 +15,13 @@ const profileImages = [
 ];
 
 
+const cacheBuster = Date.now();
+
+profileImages.forEach((imageName) => {
+    const imgCache = new Image();
+    imgCache.src = `profiles/${imageName}?v=${cacheBuster}`;
+});
+
 const randomIndex = Math.floor(Math.random() * profileImages.length);
 const selectedImage = profileImages[randomIndex];
 
@@ -34,11 +41,12 @@ const follow = document.querySelector('.follow');
 const card = document.querySelector('.card');
 
 if (image) {
-    image.style.backgroundImage = `url('profiles/${selectedImage}')`;
+    image.style.backgroundImage = `url('profiles/${selectedImage}?v=${cacheBuster}')`;
 }
 
 const loader = document.getElementById('loader');
 const loaderText = document.getElementById('loader-text');
+
 let isModalImageSet = false;
 
 function show() {
@@ -48,12 +56,10 @@ function show() {
           
           const modalImg = document.querySelector('.modal img');
           if (modalImg) {
-               modalImg.src = `profiles/${selectedModalImage}`;
+               modalImg.src = `profiles/${selectedModalImage}?v=${cacheBuster}`;
           }
-
           isModalImageSet = true;
      }
-
 
      hover.classList.add('active');
      modal.classList.add('show');
