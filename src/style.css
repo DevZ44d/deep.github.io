@@ -233,16 +233,18 @@ h1:hover {
     z-index: 2;
 }
 
-.main .image{
+.main .image {
     position: relative;
     width: 110px;
     height: 110px;
     border-radius: 50%;
-    background: url('imgg.png') no-repeat center / cover;;
     margin-bottom: 2px;
     overflow: hidden;
     cursor: pointer;
     transition: border .3s;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover;
 }
 
 .image .hover{
