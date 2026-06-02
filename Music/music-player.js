@@ -1,7 +1,6 @@
 /**
  * music-player.js — Streaming Music Player
  * Real audio visualizer using Web Audio API AnalyserNode
- * Works when audio files are served from same origin (GitHub Pages)
  */
 
 const MusicPlayer = (() => {
@@ -14,7 +13,6 @@ const MusicPlayer = (() => {
   let current  = 0;
   let audio    = null;
   let playing  = false;
-
   let animId   = null;
   let phase    = 0;
 
@@ -27,7 +25,6 @@ const MusicPlayer = (() => {
 
   const BAR_COUNT = 55;
 
-  // Per-bar state for idle / fallback animation
   const barTarget  = new Float32Array(BAR_COUNT);
   const barCurrent = new Float32Array(BAR_COUNT);
   const barPhase   = new Float32Array(BAR_COUNT);
@@ -60,8 +57,8 @@ const MusicPlayer = (() => {
     try {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.75;
+      analyser.fftSize = 512; // more bins = better resolution
+      analyser.smoothingTimeConstant = 0.8;
       freqData = new Uint8Array(analyser.frequencyBinCount);
       analyser.connect(audioCtx.destination);
     } catch (e) {
@@ -72,14 +69,12 @@ const MusicPlayer = (() => {
   }
 
   function connectAudioSource() {
-    if (!audioCtx || !analyser || !audio) return;
-    // An Audio element can only be connected once per AudioContext
-    // Re-use the existing source node if already connected
-    if (source) return;
+    if (!audioCtx || !analyser || !audio || source) return;
     try {
       source = audioCtx.createMediaElementSource(audio);
       source.connect(analyser);
       webAudioReady = true;
+      console.info("[MusicPlayer] Web Audio connected ✓");
     } catch (e) {
       console.warn("[MusicPlayer] createMediaElementSource failed:", e);
       webAudioReady = false;
@@ -114,7 +109,6 @@ const MusicPlayer = (() => {
     const clip = document.getElementById("mp-ticker-clip");
     if (!txt || !clip) return;
     tickLastTime = null;
-
     function step(ts) {
       if (tickLastTime === null) tickLastTime = ts;
       const dt = Math.min(ts - tickLastTime, 50);
@@ -138,7 +132,7 @@ const MusicPlayer = (() => {
     setTimeout(startTicker, 60);
   }
 
-  /* ── Fallback procedural wave (idle or no Web Audio) ── */
+  /* ── Fallback procedural wave ── */
   function updateTargetsFallback(now) {
     if (now - lastTargetUpdate < 80) return;
     lastTargetUpdate = now;
@@ -154,25 +148,37 @@ const MusicPlayer = (() => {
     }
   }
 
-  /* ── Real frequency values from AnalyserNode ── */
+  /* ── Real frequency values ── */
   function getFreqValues() {
     if (!webAudioReady || !analyser || !freqData) return null;
     analyser.getByteFrequencyData(freqData);
 
-    // Check if analyser is actually returning data (all zeros = CORS blocked)
+    // check not all zeros
     let hasData = false;
     for (let i = 0; i < freqData.length; i++) {
       if (freqData[i] > 0) { hasData = true; break; }
     }
     if (!hasData) return null;
 
-    const usableBins = Math.floor(freqData.length * 0.75);
+    // Map frequency bins to bars
+    // Focus on 20Hz–16kHz range (musically relevant)
+    // With fftSize=512 and typical 44100Hz sample rate:
+    // each bin = 44100/512 ≈ 86Hz, so bin 0=0Hz, bin 185≈16kHz
+    const totalBins = freqData.length; // 256 bins
+    const maxBin    = Math.floor(totalBins * 0.72); // ~16kHz cutoff
+
     const values = new Float32Array(BAR_COUNT);
     for (let i = 0; i < BAR_COUNT; i++) {
-      const start = Math.floor((i / BAR_COUNT) * usableBins);
-      const end   = Math.floor(((i + 1) / BAR_COUNT) * usableBins);
+      // Use logarithmic mapping so bass/mid/treble are balanced
+      const logStart = Math.pow(i / BAR_COUNT, 1.5) * maxBin;
+      const logEnd   = Math.pow((i + 1) / BAR_COUNT, 1.5) * maxBin;
+      const start    = Math.floor(logStart);
+      const end      = Math.max(start + 1, Math.floor(logEnd));
       let sum = 0, count = 0;
-      for (let b = start; b < end; b++) { sum += freqData[b]; count++; }
+      for (let b = start; b < end && b < totalBins; b++) {
+        sum += freqData[b];
+        count++;
+      }
       values[i] = count > 0 ? (sum / count) / 255 : 0;
     }
     return values;
@@ -196,50 +202,49 @@ const MusicPlayer = (() => {
     const realValues = playing ? getFreqValues() : null;
     if (!realValues) updateTargetsFallback(now);
 
-    const smoothSpeed = playing ? 0.18 : 0.12;
+    const smoothSpeed = playing ? 0.2 : 0.12;
 
     for (let i = 0; i < BAR_COUNT; i++) {
       let v;
 
+      // Strong diamond/lens envelope — tall in center, short on edges
+      // This matches the reference image shape
+      const pos = i / (BAR_COUNT - 1); // 0 → 1
+      const envelope = Math.sin(pos * Math.PI); // 0 at edges, 1 at center
+
       if (realValues) {
-        // Real audio data path
-        barCurrent[i] += (realValues[i] - barCurrent[i]) * 0.35;
+        barCurrent[i] += (realValues[i] - barCurrent[i]) * 0.3;
         v = barCurrent[i];
-        // Subtle shimmer on top
-        v += Math.sin(phase * barSpeed[i] * 2 + barPhase[i]) * 0.025;
-        // Natural edge envelope
-        const env = Math.sin((i / (BAR_COUNT - 1)) * Math.PI);
-        v *= (0.7 + env * 0.3);
+        // apply strong envelope to get the diamond shape
+        v = v * (0.15 + envelope * 0.85);
+        // subtle shimmer
+        v += Math.sin(phase * barSpeed[i] * 2 + barPhase[i]) * 0.02 * envelope;
       } else {
-        // Fallback procedural path
         barCurrent[i] += (barTarget[i] - barCurrent[i]) * smoothSpeed;
         v = barCurrent[i];
         if (playing) {
           v += Math.sin(phase * barSpeed[i] * 3.5 + barPhase[i]) * 0.08;
           v += Math.sin(phase * 0.8 + i * 0.22) * 0.06;
-          const env = Math.sin((i / (BAR_COUNT - 1)) * Math.PI);
-          v *= (0.65 + env * 0.35);
         } else {
           v += Math.sin(phase * barSpeed[i] * 2.0 + barPhase[i]) * 0.12;
           v += Math.sin(phase * 0.5 + i * 0.22) * 0.08;
-          const env = Math.sin((i / (BAR_COUNT - 1)) * Math.PI);
-          v *= (0.55 + env * 0.45);
         }
+        v *= (0.15 + envelope * 0.85);
       }
 
-      v = Math.max(0.03, Math.min(1, v));
+      v = Math.max(0.02, Math.min(1, v));
 
-      const barH = Math.max(2, v * H * (playing ? 0.92 : 0.88));
+      const barH = Math.max(2, v * H * (playing ? 0.95 : 0.88));
       const x    = i * (barW + gap);
       const y    = (H - barH) / 2;
       const r    = Math.min(rad, barH / 2);
 
-      const alpha = playing ? 0.55 + v * 0.45 : 0.30 + v * 0.40;
+      const alpha = playing ? 0.6 + v * 0.4 : 0.25 + v * 0.45;
       ctx.fillStyle = `rgba(255,255,255,${alpha})`;
 
-      if (playing && v > 0.5) {
-        ctx.shadowColor = `rgba(255,255,255,${(v - 0.5) * 0.6})`;
-        ctx.shadowBlur  = 8 + v * 18;
+      if (playing && v > 0.45) {
+        ctx.shadowColor = `rgba(255,255,255,${(v - 0.45) * 0.55})`;
+        ctx.shadowBlur  = 6 + v * 14;
       } else {
         ctx.shadowBlur = 0;
       }
@@ -262,15 +267,12 @@ const MusicPlayer = (() => {
     animId = requestAnimationFrame(drawWave);
   }
 
-  /* ── Single persistent Audio element ── */
-  // We create it once and reuse it — changing .src is enough to load a new song.
-  // This avoids the "already connected to AudioContext" problem when switching songs.
+  /* ── Audio element (single, persistent) ── */
   function createAudioElement() {
     audio = new Audio();
     audio.preload = "metadata";
-    // No crossOrigin needed — same origin (GitHub Pages) has no CORS restriction
-    audio.addEventListener("ended", onEnded);
-    audio.addEventListener("error", onError);
+    audio.addEventListener("ended",   onEnded);
+    audio.addEventListener("error",   onError);
   }
 
   function onEnded() { next(); }
@@ -287,8 +289,6 @@ const MusicPlayer = (() => {
   function loadSong(idx, autoplay) {
     if (!songs.length) return;
     current = ((idx % songs.length) + songs.length) % songs.length;
-
-    // Just update src — reuse the same audio element and source node
     audio.src = songs[current].url;
     resetTicker(label(current));
     setStyle(false);
@@ -296,9 +296,7 @@ const MusicPlayer = (() => {
     if (autoplay) {
       playing = true;
       setStyle(true);
-
       if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
-
       audio.play().catch(err => {
         console.warn("[MusicPlayer] play blocked:", err);
         playing = false;
@@ -311,7 +309,7 @@ const MusicPlayer = (() => {
   function togglePlay() {
     if (!songs.length) return;
 
-    // Create AudioContext and connect source on first user interaction
+    // Setup + connect on first interaction
     setupAudioContext();
     connectAudioSource();
 
@@ -321,12 +319,10 @@ const MusicPlayer = (() => {
       setStyle(false);
     } else {
       if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
-
       if (!audio.src || audio.src === location.href) {
         loadSong(current, true);
         return;
       }
-
       audio.play().then(() => {
         playing = true;
         setStyle(true);
@@ -371,7 +367,7 @@ const MusicPlayer = (() => {
       return;
     }
     buildDOM();
-    createAudioElement();   // single element, reused for all songs
+    createAudioElement();
     requestAnimationFrame(drawWave);
     resetTicker(label(current));
     watchModal();
