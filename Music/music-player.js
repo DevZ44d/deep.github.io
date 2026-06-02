@@ -165,29 +165,34 @@ const MusicPlayer = (() => {
     }
     if (!hasData) return null;
 
-    // Use logarithmic frequency mapping so high-freq bars aren't always empty.
-    // Human hearing is logarithmic — this mirrors how music actually sounds.
+    // Logarithmic frequency mapping — mirrors how human hearing works.
     const nyquist   = audioCtx.sampleRate / 2;
-    const minFreq   = 40;    // Hz — skip sub-bass rumble
-    const maxFreq   = 18000; // Hz — cover full audible range
+    const minFreq   = 80;     // Hz — skip deep sub-bass that's always loud
+    const maxFreq   = 16000;  // Hz
     const minLog    = Math.log10(minFreq);
     const maxLog    = Math.log10(maxFreq);
 
-    const values = new Float32Array(BAR_COUNT);
+    const raw = new Float32Array(BAR_COUNT);
     for (let i = 0; i < BAR_COUNT; i++) {
-      // Frequency edges for this bar (log scale)
       const freqLo = Math.pow(10, minLog + (i     / BAR_COUNT) * (maxLog - minLog));
       const freqHi = Math.pow(10, minLog + ((i+1) / BAR_COUNT) * (maxLog - minLog));
-
-      // Convert Hz → bin index
-      const binLo = Math.floor(freqLo / nyquist * freqData.length);
-      const binHi = Math.ceil (freqHi / nyquist * freqData.length);
-      const lo    = Math.max(0, Math.min(freqData.length - 1, binLo));
-      const hi    = Math.max(lo + 1, Math.min(freqData.length, binHi));
-
+      const binLo  = Math.floor(freqLo / nyquist * freqData.length);
+      const binHi  = Math.ceil (freqHi / nyquist * freqData.length);
+      const lo     = Math.max(0, Math.min(freqData.length - 1, binLo));
+      const hi     = Math.max(lo + 1, Math.min(freqData.length, binHi));
       let sum = 0;
       for (let b = lo; b < hi; b++) sum += freqData[b];
-      values[i] = (sum / (hi - lo)) / 255;
+      raw[i] = (sum / (hi - lo)) / 255;
+    }
+
+    // Per-bar gain: reduce bass (left) and gently boost mids/treble (right)
+    // so the visualizer looks balanced instead of left-heavy.
+    // Gain curve: starts at 0.55 for bass, rises to 1.6 for mid-treble.
+    const values = new Float32Array(BAR_COUNT);
+    for (let i = 0; i < BAR_COUNT; i++) {
+      const t    = i / (BAR_COUNT - 1);           // 0 = bass, 1 = treble
+      const gain = 0.55 + t * 1.05;               // 0.55 → 1.60
+      values[i]  = Math.min(1, raw[i] * gain);
     }
     return values;
   }
