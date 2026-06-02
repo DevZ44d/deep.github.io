@@ -1,6 +1,7 @@
 /**
  * music-player.js — Streaming Music Player
- * Realistic procedural wave that mimics real audio analysis
+ * Real audio visualizer using Web Audio API AnalyserNode
+ * Works when audio files are served from same origin (GitHub Pages)
  */
 
 const MusicPlayer = (() => {
@@ -17,24 +18,29 @@ const MusicPlayer = (() => {
   let animId   = null;
   let phase    = 0;
 
-  // Per-bar state for organic randomness
-  const BAR_COUNT = 55;
-  const barTarget  = new Float32Array(BAR_COUNT); // target amplitude
-  const barCurrent = new Float32Array(BAR_COUNT); // smoothed current
-  const barPhase   = new Float32Array(BAR_COUNT); // individual phase offset
-  const barSpeed   = new Float32Array(BAR_COUNT); // individual speed
+  // Web Audio API
+  let audioCtx      = null;
+  let analyser      = null;
+  let source        = null;
+  let freqData      = null;
+  let webAudioReady = false;
 
-  // Init per-bar randoms once
+  const BAR_COUNT = 55;
+
+  // Per-bar state for idle / fallback animation
+  const barTarget  = new Float32Array(BAR_COUNT);
+  const barCurrent = new Float32Array(BAR_COUNT);
+  const barPhase   = new Float32Array(BAR_COUNT);
+  const barSpeed   = new Float32Array(BAR_COUNT);
+
   for (let i = 0; i < BAR_COUNT; i++) {
-    barPhase[i] = Math.random() * Math.PI * 2;
-    barSpeed[i] = 0.6 + Math.random() * 0.8;
+    barPhase[i]   = Math.random() * Math.PI * 2;
+    barSpeed[i]   = 0.6 + Math.random() * 0.8;
     barCurrent[i] = 0.05;
     barTarget[i]  = 0.05;
   }
 
-  // How often we randomise targets (ms)
   let lastTargetUpdate = 0;
-
   let tickRaf      = null;
   let tickLastTime = null;
   let tickX        = 0;
@@ -47,6 +53,38 @@ const MusicPlayer = (() => {
     return `${pad(i)}. ${s.title}${s.artist ? " — " + s.artist : ""}`;
   }
   function rnd(min, max) { return min + Math.random() * (max - min); }
+
+  /* ── Web Audio Setup ── */
+  function setupAudioContext() {
+    if (audioCtx) return;
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.75;
+      freqData = new Uint8Array(analyser.frequencyBinCount);
+      analyser.connect(audioCtx.destination);
+    } catch (e) {
+      console.warn("[MusicPlayer] Web Audio API not available:", e);
+      audioCtx = null;
+      analyser = null;
+    }
+  }
+
+  function connectAudioSource() {
+    if (!audioCtx || !analyser || !audio) return;
+    // An Audio element can only be connected once per AudioContext
+    // Re-use the existing source node if already connected
+    if (source) return;
+    try {
+      source = audioCtx.createMediaElementSource(audio);
+      source.connect(analyser);
+      webAudioReady = true;
+    } catch (e) {
+      console.warn("[MusicPlayer] createMediaElementSource failed:", e);
+      webAudioReady = false;
+    }
+  }
 
   /* ── DOM ── */
   function buildDOM() {
@@ -100,69 +138,93 @@ const MusicPlayer = (() => {
     setTimeout(startTicker, 60);
   }
 
-  /* ── Realistic wave engine ── */
-  function updateTargets(now) {
-    // Refresh targets every ~80ms — mimics audio "beats" changing
+  /* ── Fallback procedural wave (idle or no Web Audio) ── */
+  function updateTargetsFallback(now) {
     if (now - lastTargetUpdate < 80) return;
     lastTargetUpdate = now;
-
-    // Pick a random "energy center" — like a beat hitting certain frequencies
     const center = rnd(0.15, 0.85);
     const width  = rnd(0.15, 0.45);
     const energy = playing ? rnd(0.4, 1.0) : rnd(0.25, 0.65);
-
     for (let i = 0; i < BAR_COUNT; i++) {
-      const pos  = i / (BAR_COUNT - 1);
-      // Gaussian bump around center
-      const dist = (pos - center) / width;
-      const bump = Math.exp(-dist * dist * 2.5);
-      // Add some random noise per bar
+      const pos   = i / (BAR_COUNT - 1);
+      const dist  = (pos - center) / width;
+      const bump  = Math.exp(-dist * dist * 2.5);
       const noise = rnd(-0.08, 0.08);
       barTarget[i] = Math.max(0.03, Math.min(1, bump * energy + noise));
     }
   }
 
+  /* ── Real frequency values from AnalyserNode ── */
+  function getFreqValues() {
+    if (!webAudioReady || !analyser || !freqData) return null;
+    analyser.getByteFrequencyData(freqData);
+
+    // Check if analyser is actually returning data (all zeros = CORS blocked)
+    let hasData = false;
+    for (let i = 0; i < freqData.length; i++) {
+      if (freqData[i] > 0) { hasData = true; break; }
+    }
+    if (!hasData) return null;
+
+    const usableBins = Math.floor(freqData.length * 0.75);
+    const values = new Float32Array(BAR_COUNT);
+    for (let i = 0; i < BAR_COUNT; i++) {
+      const start = Math.floor((i / BAR_COUNT) * usableBins);
+      const end   = Math.floor(((i + 1) / BAR_COUNT) * usableBins);
+      let sum = 0, count = 0;
+      for (let b = start; b < end; b++) { sum += freqData[b]; count++; }
+      values[i] = count > 0 ? (sum / count) / 255 : 0;
+    }
+    return values;
+  }
+
+  /* ── Draw wave ── */
   function drawWave(now) {
     const canvas = document.getElementById("mp-wave-bar");
     if (!canvas) { animId = requestAnimationFrame(drawWave); return; }
 
-    const ctx   = canvas.getContext("2d");
-    const W     = canvas.width;
-    const H     = canvas.height;
-    const gap   = 2.5;
-    const barW  = (W - gap * (BAR_COUNT - 1)) / BAR_COUNT;
-    const rad   = barW / 2;
+    const ctx  = canvas.getContext("2d");
+    const W    = canvas.width;
+    const H    = canvas.height;
+    const gap  = 2.5;
+    const barW = (W - gap * (BAR_COUNT - 1)) / BAR_COUNT;
+    const rad  = barW / 2;
 
     ctx.clearRect(0, 0, W, H);
-
-    // Advance global phase
     phase += playing ? 0.06 : 0.032;
 
-    updateTargets(now);
+    const realValues = playing ? getFreqValues() : null;
+    if (!realValues) updateTargetsFallback(now);
 
-    // Smooth each bar toward its target
     const smoothSpeed = playing ? 0.18 : 0.12;
 
     for (let i = 0; i < BAR_COUNT; i++) {
-      barCurrent[i] += (barTarget[i] - barCurrent[i]) * smoothSpeed;
+      let v;
 
-      // Layer 1: smoothed random target
-      let v = barCurrent[i];
-
-      if (playing) {
-        // Layer 2: fast per-bar sine (high-freq shimmer)
-        v += Math.sin(phase * barSpeed[i] * 3.5 + barPhase[i]) * 0.08;
-        // Layer 3: slow global sine (breathing/rhythm)
-        v += Math.sin(phase * 0.8 + i * 0.22) * 0.06;
-        // Layer 4: envelope — edges slightly lower like real spectrum
+      if (realValues) {
+        // Real audio data path
+        barCurrent[i] += (realValues[i] - barCurrent[i]) * 0.35;
+        v = barCurrent[i];
+        // Subtle shimmer on top
+        v += Math.sin(phase * barSpeed[i] * 2 + barPhase[i]) * 0.025;
+        // Natural edge envelope
         const env = Math.sin((i / (BAR_COUNT - 1)) * Math.PI);
-        v *= (0.65 + env * 0.35);
+        v *= (0.7 + env * 0.3);
       } else {
-        // Idle: active wave animation (same style as playing but calmer)
-        v += Math.sin(phase * barSpeed[i] * 2.0 + barPhase[i]) * 0.12;
-        v += Math.sin(phase * 0.5 + i * 0.22) * 0.08;
-        const env = Math.sin((i / (BAR_COUNT - 1)) * Math.PI);
-        v *= (0.55 + env * 0.45);
+        // Fallback procedural path
+        barCurrent[i] += (barTarget[i] - barCurrent[i]) * smoothSpeed;
+        v = barCurrent[i];
+        if (playing) {
+          v += Math.sin(phase * barSpeed[i] * 3.5 + barPhase[i]) * 0.08;
+          v += Math.sin(phase * 0.8 + i * 0.22) * 0.06;
+          const env = Math.sin((i / (BAR_COUNT - 1)) * Math.PI);
+          v *= (0.65 + env * 0.35);
+        } else {
+          v += Math.sin(phase * barSpeed[i] * 2.0 + barPhase[i]) * 0.12;
+          v += Math.sin(phase * 0.5 + i * 0.22) * 0.08;
+          const env = Math.sin((i / (BAR_COUNT - 1)) * Math.PI);
+          v *= (0.55 + env * 0.45);
+        }
       }
 
       v = Math.max(0.03, Math.min(1, v));
@@ -172,11 +234,9 @@ const MusicPlayer = (() => {
       const y    = (H - barH) / 2;
       const r    = Math.min(rad, barH / 2);
 
-      // Colour — brighter taller bars (mimics real visualiser)
       const alpha = playing ? 0.55 + v * 0.45 : 0.30 + v * 0.40;
       ctx.fillStyle = `rgba(255,255,255,${alpha})`;
 
-      // Glow on tall bars
       if (playing && v > 0.5) {
         ctx.shadowColor = `rgba(255,255,255,${(v - 0.5) * 0.6})`;
         ctx.shadowBlur  = 8 + v * 18;
@@ -184,7 +244,6 @@ const MusicPlayer = (() => {
         ctx.shadowBlur = 0;
       }
 
-      // Rounded pill bar
       ctx.beginPath();
       ctx.moveTo(x + r, y);
       ctx.lineTo(x + barW - r, y);
@@ -203,25 +262,21 @@ const MusicPlayer = (() => {
     animId = requestAnimationFrame(drawWave);
   }
 
-  /* ── Audio element ── */
+  /* ── Single persistent Audio element ── */
+  // We create it once and reuse it — changing .src is enough to load a new song.
+  // This avoids the "already connected to AudioContext" problem when switching songs.
   function createAudioElement() {
-    if (audio) {
-      audio.pause();
-      audio.removeEventListener("ended", onEnded);
-      audio.removeEventListener("error", onError);
-      audio.src = "";
-      audio.load();
-    }
     audio = new Audio();
-    audio.preload     = "metadata";
-    audio.crossOrigin = null;
+    audio.preload = "metadata";
+    // No crossOrigin needed — same origin (GitHub Pages) has no CORS restriction
     audio.addEventListener("ended", onEnded);
     audio.addEventListener("error", onError);
   }
 
   function onEnded() { next(); }
-  function onError(e) {
-    console.warn("[MusicPlayer] error:", songs[current]?.url);
+
+  function onError() {
+    console.warn("[MusicPlayer] audio error:", songs[current]?.url);
     if (skipGuard) return;
     skipGuard = true;
     setTimeout(() => { skipGuard = false; }, 3000);
@@ -232,7 +287,8 @@ const MusicPlayer = (() => {
   function loadSong(idx, autoplay) {
     if (!songs.length) return;
     current = ((idx % songs.length) + songs.length) % songs.length;
-    createAudioElement();
+
+    // Just update src — reuse the same audio element and source node
     audio.src = songs[current].url;
     resetTicker(label(current));
     setStyle(false);
@@ -240,6 +296,9 @@ const MusicPlayer = (() => {
     if (autoplay) {
       playing = true;
       setStyle(true);
+
+      if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+
       audio.play().catch(err => {
         console.warn("[MusicPlayer] play blocked:", err);
         playing = false;
@@ -251,24 +310,43 @@ const MusicPlayer = (() => {
   /* ── Controls ── */
   function togglePlay() {
     if (!songs.length) return;
+
+    // Create AudioContext and connect source on first user interaction
+    setupAudioContext();
+    connectAudioSource();
+
     if (playing) {
       audio.pause();
       playing = false;
       setStyle(false);
     } else {
-      if (!audio || !audio.src || audio.src === location.href) {
+      if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+
+      if (!audio.src || audio.src === location.href) {
         loadSong(current, true);
         return;
       }
+
       audio.play().then(() => {
         playing = true;
         setStyle(true);
-      }).catch(() => {});
+      }).catch(() => {
+        loadSong(current, true);
+      });
     }
   }
 
-  function prev() { loadSong(current - 1, playing); }
-  function next() { loadSong(current + 1, playing); }
+  function prev() {
+    setupAudioContext();
+    connectAudioSource();
+    loadSong(current - 1, playing);
+  }
+
+  function next() {
+    setupAudioContext();
+    connectAudioSource();
+    loadSong(current + 1, playing);
+  }
 
   function setStyle(on) {
     const r   = document.getElementById("mp-root");
@@ -293,7 +371,7 @@ const MusicPlayer = (() => {
       return;
     }
     buildDOM();
-    createAudioElement();
+    createAudioElement();   // single element, reused for all songs
     requestAnimationFrame(drawWave);
     resetTicker(label(current));
     watchModal();
