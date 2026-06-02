@@ -25,8 +25,10 @@ const MusicPlayer = (() => {
 
   const BAR_COUNT = 55;
 
-  const barTarget  = new Float32Array(BAR_COUNT);
-  const barCurrent = new Float32Array(BAR_COUNT);
+  // Per-bar smoothed values + fallback state
+  const barSmooth  = new Float32Array(BAR_COUNT); // smoothed real values
+  const barTarget  = new Float32Array(BAR_COUNT); // fallback targets
+  const barCurrent = new Float32Array(BAR_COUNT); // fallback current
   const barPhase   = new Float32Array(BAR_COUNT);
   const barSpeed   = new Float32Array(BAR_COUNT);
 
@@ -35,6 +37,7 @@ const MusicPlayer = (() => {
     barSpeed[i]   = 0.6 + Math.random() * 0.8;
     barCurrent[i] = 0.05;
     barTarget[i]  = 0.05;
+    barSmooth[i]  = 0.05;
   }
 
   let lastTargetUpdate = 0;
@@ -57,9 +60,15 @@ const MusicPlayer = (() => {
     try {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 512; // more bins = better resolution
-      analyser.smoothingTimeConstant = 0.8;
-      freqData = new Uint8Array(analyser.frequencyBinCount);
+      analyser.fftSize = 1024;
+      // Low smoothing = fast reaction to drums/beats
+      // High smoothing = smooth slow animation
+      // 0.65 is a good balance: responsive but not too jumpy
+      analyser.smoothingTimeConstant = 0.65;
+      // Boost sensitivity range
+      analyser.minDecibels = -90;
+      analyser.maxDecibels = -10;
+      freqData = new Uint8Array(analyser.frequencyBinCount); // 512 bins
       analyser.connect(audioCtx.destination);
     } catch (e) {
       console.warn("[MusicPlayer] Web Audio API not available:", e);
@@ -148,38 +157,50 @@ const MusicPlayer = (() => {
     }
   }
 
-  /* ── Real frequency values ── */
+  /* ── Real frequency values — full bar coverage, logarithmic scale ── */
   function getFreqValues() {
     if (!webAudioReady || !analyser || !freqData) return null;
     analyser.getByteFrequencyData(freqData);
 
-    // check not all zeros
+    // Check we have actual data
     let hasData = false;
     for (let i = 0; i < freqData.length; i++) {
       if (freqData[i] > 0) { hasData = true; break; }
     }
     if (!hasData) return null;
 
-    // Map frequency bins to bars
-    // Focus on 20Hz–16kHz range (musically relevant)
-    // With fftSize=512 and typical 44100Hz sample rate:
-    // each bin = 44100/512 ≈ 86Hz, so bin 0=0Hz, bin 185≈16kHz
-    const totalBins = freqData.length; // 256 bins
-    const maxBin    = Math.floor(totalBins * 0.72); // ~16kHz cutoff
-
+    const totalBins = freqData.length; // 512 bins with fftSize=1024
+    // Cover full audible range — all 512 bins
+    // Logarithmic scale: more resolution in bass, less in treble (matches human hearing)
     const values = new Float32Array(BAR_COUNT);
+
     for (let i = 0; i < BAR_COUNT; i++) {
-      // Use logarithmic mapping so bass/mid/treble are balanced
-      const logStart = Math.pow(i / BAR_COUNT, 1.5) * maxBin;
-      const logEnd   = Math.pow((i + 1) / BAR_COUNT, 1.5) * maxBin;
-      const start    = Math.floor(logStart);
-      const end      = Math.max(start + 1, Math.floor(logEnd));
+      // Logarithmic bin mapping — bass gets more bars, treble gets less
+      // pow(x, 2) = stronger log curve = more bass detail
+      const startRatio = Math.pow(i / BAR_COUNT, 2);
+      const endRatio   = Math.pow((i + 1) / BAR_COUNT, 2);
+      const start = Math.floor(startRatio * totalBins);
+      const end   = Math.max(start + 1, Math.floor(endRatio * totalBins));
+
       let sum = 0, count = 0;
       for (let b = start; b < end && b < totalBins; b++) {
         sum += freqData[b];
         count++;
       }
-      values[i] = count > 0 ? (sum / count) / 255 : 0;
+      const raw = count > 0 ? (sum / count) / 255 : 0;
+
+      // Per-bar smoothing: fast attack, slow release (like real VU meters)
+      // Attack: jump up quickly when signal rises
+      // Release: fall down slowly — gives the "bouncing" bar effect
+      const attack  = 0.6;  // fast rise
+      const release = 0.12; // slow fall
+      if (raw > barSmooth[i]) {
+        barSmooth[i] += (raw - barSmooth[i]) * attack;
+      } else {
+        barSmooth[i] += (raw - barSmooth[i]) * release;
+      }
+
+      values[i] = barSmooth[i];
     }
     return values;
   }
@@ -202,49 +223,51 @@ const MusicPlayer = (() => {
     const realValues = playing ? getFreqValues() : null;
     if (!realValues) updateTargetsFallback(now);
 
-    const smoothSpeed = playing ? 0.2 : 0.12;
-
     for (let i = 0; i < BAR_COUNT; i++) {
       let v;
 
-      // Strong diamond/lens envelope — tall in center, short on edges
-      // This matches the reference image shape
-      const pos = i / (BAR_COUNT - 1); // 0 → 1
-      const envelope = Math.sin(pos * Math.PI); // 0 at edges, 1 at center
-
       if (realValues) {
-        barCurrent[i] += (realValues[i] - barCurrent[i]) * 0.3;
-        v = barCurrent[i];
-        // apply strong envelope to get the diamond shape
-        v = v * (0.15 + envelope * 0.85);
-        // subtle shimmer
-        v += Math.sin(phase * barSpeed[i] * 2 + barPhase[i]) * 0.02 * envelope;
+        // Pure real data — no envelope, each bar is truly independent
+        v = realValues[i];
+
+        // Amplify low values so quiet parts still show movement
+        // sqrt gives more visual range to quiet signals
+        v = Math.sqrt(v) * 0.85 + v * 0.15;
+
+        // Very slight shimmer so it doesn't look static during sustained notes
+        v += Math.sin(phase * barSpeed[i] + barPhase[i]) * 0.015;
+
       } else {
+        // Fallback procedural
+        const smoothSpeed = playing ? 0.18 : 0.12;
         barCurrent[i] += (barTarget[i] - barCurrent[i]) * smoothSpeed;
         v = barCurrent[i];
         if (playing) {
           v += Math.sin(phase * barSpeed[i] * 3.5 + barPhase[i]) * 0.08;
           v += Math.sin(phase * 0.8 + i * 0.22) * 0.06;
+          const env = Math.sin((i / (BAR_COUNT - 1)) * Math.PI);
+          v *= (0.5 + env * 0.5);
         } else {
           v += Math.sin(phase * barSpeed[i] * 2.0 + barPhase[i]) * 0.12;
           v += Math.sin(phase * 0.5 + i * 0.22) * 0.08;
+          const env = Math.sin((i / (BAR_COUNT - 1)) * Math.PI);
+          v *= (0.4 + env * 0.6);
         }
-        v *= (0.15 + envelope * 0.85);
       }
 
       v = Math.max(0.02, Math.min(1, v));
 
-      const barH = Math.max(2, v * H * (playing ? 0.95 : 0.88));
+      const barH = Math.max(2, v * H * (playing ? 0.96 : 0.88));
       const x    = i * (barW + gap);
       const y    = (H - barH) / 2;
       const r    = Math.min(rad, barH / 2);
 
-      const alpha = playing ? 0.6 + v * 0.4 : 0.25 + v * 0.45;
+      const alpha = playing ? 0.55 + v * 0.45 : 0.25 + v * 0.45;
       ctx.fillStyle = `rgba(255,255,255,${alpha})`;
 
-      if (playing && v > 0.45) {
-        ctx.shadowColor = `rgba(255,255,255,${(v - 0.45) * 0.55})`;
-        ctx.shadowBlur  = 6 + v * 14;
+      if (playing && v > 0.4) {
+        ctx.shadowColor = `rgba(255,255,255,${(v - 0.4) * 0.5})`;
+        ctx.shadowBlur  = 4 + v * 12;
       } else {
         ctx.shadowBlur = 0;
       }
@@ -271,8 +294,8 @@ const MusicPlayer = (() => {
   function createAudioElement() {
     audio = new Audio();
     audio.preload = "metadata";
-    audio.addEventListener("ended",   onEnded);
-    audio.addEventListener("error",   onError);
+    audio.addEventListener("ended", onEnded);
+    audio.addEventListener("error", onError);
   }
 
   function onEnded() { next(); }
@@ -308,8 +331,6 @@ const MusicPlayer = (() => {
   /* ── Controls ── */
   function togglePlay() {
     if (!songs.length) return;
-
-    // Setup + connect on first interaction
     setupAudioContext();
     connectAudioSource();
 
