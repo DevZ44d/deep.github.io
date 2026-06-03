@@ -53,7 +53,7 @@
 #mp-wave-bar {
   display: block;
   width: 340px;
-  height: 40px;
+  height: 64px;
   cursor: pointer;
   border-radius: 999px;
   border: 1px solid rgba(255,255,255,0.18);
@@ -67,11 +67,13 @@
 #mp-wave-bar:hover { border-color: rgba(255,255,255,0.4); }
 
 #mp-root.mp-playing #mp-wave-bar {
-  border-color: rgba(255,255,255,0.4);
+  border-color: rgba(255,255,255,0.5);
   box-shadow:
-    0 0 20px rgba(255,255,255,0.15),
-    0 0 50px rgba(255,255,255,0.07),
-    0 0 80px rgba(255,255,255,0.03);
+    0 0 0px 1px rgba(255,255,255,0.08),
+    0 0 18px rgba(255,255,255,0.18),
+    0 0 40px rgba(255,255,255,0.10),
+    0 0 70px rgba(255,255,255,0.05);
+  transition: box-shadow 0.05s ease, border-color 0.05s ease;
 }
 
 /* ── Pill (prev / ticker / next) ── */
@@ -148,6 +150,6 @@
 /* ── Mobile ── */
 @media (max-width: 480px) {
   #mp-root     { top: 12px; right: 12px; }
-  #mp-wave-bar { width: 240px; height: 32px; }
+  #mp-wave-bar { width: 240px; height: 52px; }
   #mp-pill     { width: 160px; }
 }
