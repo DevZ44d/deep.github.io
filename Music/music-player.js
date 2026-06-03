@@ -9,7 +9,7 @@ const MusicPlayer = (() => {
   const songs = (typeof PLAYLIST !== "undefined" && PLAYLIST.length) ? PLAYLIST : [];
 
   const WAVE_W = 340;
-  const WAVE_H = 40;
+  const WAVE_H = 64;
 
   let current  = 0;
   let audio    = null;
@@ -17,6 +17,12 @@ const MusicPlayer = (() => {
 
   let animId   = null;
   let phase    = 0;
+
+  // Beat detection — tracks bass energy to fire edge glow on kick/snare
+  let beatEnergy    = 0;   // smoothed bass RMS
+  let beatPeak      = 0;   // recent peak for threshold
+  let beatGlow      = 0;   // current glow intensity 0-1 (decays each frame)
+  let beatCooldown  = 0;   // frames until next beat can fire
 
   // Web Audio API
   let audioCtx      = null;
@@ -158,19 +164,17 @@ const MusicPlayer = (() => {
     if (!webAudioReady || !analyser || !freqData) return null;
     analyser.getByteFrequencyData(freqData);
 
-    // Check if analyser is actually returning data (all zeros = CORS blocked)
     let hasData = false;
     for (let i = 0; i < freqData.length; i++) {
       if (freqData[i] > 0) { hasData = true; break; }
     }
     if (!hasData) return null;
 
-    // Logarithmic frequency mapping — mirrors how human hearing works.
-    const nyquist   = audioCtx.sampleRate / 2;
-    const minFreq   = 80;     // Hz — skip deep sub-bass that's always loud
-    const maxFreq   = 16000;  // Hz
-    const minLog    = Math.log10(minFreq);
-    const maxLog    = Math.log10(maxFreq);
+    const nyquist = audioCtx.sampleRate / 2;
+    const minFreq = 80;
+    const maxFreq = 16000;
+    const minLog  = Math.log10(minFreq);
+    const maxLog  = Math.log10(maxFreq);
 
     const raw = new Float32Array(BAR_COUNT);
     for (let i = 0; i < BAR_COUNT; i++) {
@@ -185,15 +189,37 @@ const MusicPlayer = (() => {
       raw[i] = (sum / (hi - lo)) / 255;
     }
 
-    // Per-bar gain: reduce bass (left) and gently boost mids/treble (right)
-    // so the visualizer looks balanced instead of left-heavy.
-    // Gain curve: starts at 0.55 for bass, rises to 1.6 for mid-treble.
+    // Per-bar gain: tame bass, lift treble
     const values = new Float32Array(BAR_COUNT);
     for (let i = 0; i < BAR_COUNT; i++) {
-      const t    = i / (BAR_COUNT - 1);           // 0 = bass, 1 = treble
-      const gain = 0.55 + t * 1.05;               // 0.55 → 1.60
+      const t    = i / (BAR_COUNT - 1);
+      const gain = 0.55 + t * 1.05;
       values[i]  = Math.min(1, raw[i] * gain);
     }
+
+    // ── Beat detection from raw bass bins (60–180 Hz) ──
+    // We read directly from freqData so gain adjustments don't affect detection.
+    const bassLo  = Math.floor(60  / nyquist * freqData.length);
+    const bassHi  = Math.ceil (180 / nyquist * freqData.length);
+    let bassSum = 0, bassCount = 0;
+    for (let b = bassLo; b < bassHi && b < freqData.length; b++) {
+      bassSum += freqData[b]; bassCount++;
+    }
+    const bassRMS = bassCount > 0 ? (bassSum / bassCount) / 255 : 0;
+
+    // Smooth energy tracker (slow rise, fast fall — like a compressor)
+    beatEnergy = beatEnergy * 0.85 + bassRMS * 0.15;
+    beatPeak   = beatPeak   * 0.992 + beatEnergy * 0.008; // very slow peak follower
+
+    // Fire a beat when instantaneous energy exceeds the local average by threshold
+    if (beatCooldown > 0) beatCooldown--;
+    const threshold = beatPeak * 1.35 + 0.08;
+    if (bassRMS > threshold && beatCooldown === 0) {
+      beatGlow     = Math.min(1, beatGlow + 0.75 + bassRMS * 0.5);
+      beatCooldown = 8; // ~133ms at 60fps — prevents double-firing
+    }
+
+    // Glow decays naturally each frame (handled in drawWave)
     return values;
   }
 
@@ -212,6 +238,13 @@ const MusicPlayer = (() => {
     ctx.clearRect(0, 0, W, H);
     phase += playing ? 0.06 : 0.032;
 
+    // Decay beat glow every frame
+    if (playing) {
+      beatGlow = Math.max(0, beatGlow - 0.045);
+    } else {
+      beatGlow = 0;
+    }
+
     const realValues = playing ? getFreqValues() : null;
     if (!realValues) updateTargetsFallback(now);
 
@@ -221,13 +254,10 @@ const MusicPlayer = (() => {
       let v;
 
       if (realValues) {
-        // Real audio data path — no edge envelope so right side shows too
         barCurrent[i] += (realValues[i] - barCurrent[i]) * 0.35;
         v = barCurrent[i];
-        // Subtle shimmer only
         v += Math.sin(phase * barSpeed[i] * 2 + barPhase[i]) * 0.02;
       } else {
-        // Fallback procedural path
         barCurrent[i] += (barTarget[i] - barCurrent[i]) * smoothSpeed;
         v = barCurrent[i];
         if (playing) {
@@ -275,16 +305,51 @@ const MusicPlayer = (() => {
     }
 
     ctx.shadowBlur = 0;
+    if (beatGlow > 0.01) {
+      const ease  = beatGlow * beatGlow;           // quadratic — snappy attack, smooth tail
+      const bRad  = 999;                           // matches CSS border-radius: 999px
+      const alpha1 = ease * 0.85;
+      const alpha2 = ease * 0.40;
+      const alpha3 = ease * 0.18;
+      const spread1 = 10 + ease * 14;
+      const spread2 = ease * 30;
+
+      ctx.save();
+      ctx.shadowColor = `rgba(255,255,255,${alpha1})`;
+      ctx.shadowBlur  = spread1;
+      ctx.strokeStyle = `rgba(255,255,255,${alpha1 * 0.6})`;
+      ctx.lineWidth   = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(2, 2, W - 4, H - 4, bRad);
+      ctx.stroke();
+      ctx.restore();
+      ctx.save();
+      ctx.shadowColor = `rgba(255,255,255,${alpha2})`;
+      ctx.shadowBlur  = spread2;
+      ctx.strokeStyle = `rgba(255,255,255,${alpha2 * 0.3})`;
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.roundRect(1, 1, W - 2, H - 2, bRad);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.save();
+      ctx.shadowColor = `rgba(255,255,255,${alpha3})`;
+      ctx.shadowBlur  = 50 + ease * 30;
+      ctx.strokeStyle = `rgba(255,255,255,${alpha3 * 0.2})`;
+      ctx.lineWidth   = 0.5;
+      ctx.beginPath();
+      ctx.roundRect(0, 0, W, H, bRad);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     animId = requestAnimationFrame(drawWave);
   }
 
-  /* ── Single persistent Audio element ── */
   function createAudioElement() {
     audio = new Audio();
     audio.preload = "metadata";
-    // crossOrigin = "anonymous" is required so Web Audio API AnalyserNode
-    // can read frequency data from external URLs without CORS blocking it.
-    // The server at deep.is-a.dev must send Access-Control-Allow-Origin: *
     audio.crossOrigin = "anonymous";
     audio.addEventListener("ended", onEnded);
     audio.addEventListener("error", onError);
@@ -300,7 +365,7 @@ const MusicPlayer = (() => {
     if (songs.length > 1) setTimeout(next, 500);
   }
 
-  /* ── Load song ── */
+
   function loadSong(idx, autoplay) {
     if (!songs.length) return;
     current = ((idx % songs.length) + songs.length) % songs.length;
@@ -323,7 +388,6 @@ const MusicPlayer = (() => {
     }
   }
 
-  /* ── Controls ── */
   function togglePlay() {
     if (!songs.length) return;
 
@@ -379,7 +443,7 @@ const MusicPlayer = (() => {
     }).observe(modal, { attributes: true, attributeFilter: ["class"] });
   }
 
-  /* ── Init ── */
+
   function init() {
     if (!songs.length) {
       console.warn("[MusicPlayer] PLAYLIST is empty.");
