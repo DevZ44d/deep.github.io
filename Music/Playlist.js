@@ -12,14 +12,8 @@
 const PLAYLIST = [
   {
     id: 1,
-    title: "Peligrosa",
-    artist: "FloyyMenor",
-    url: "https://deep.is-a.dev/audios/Peligrosa.mp3"
-  },
-  {
-    id: 2,
-    title: "ElBosla Da3et",
-    artist: "Marwan Moussa",
-    url: "https://deep.is-a.dev/audios/El_Bosla_Da3et.mp3"
+    title: "Warrior",
+    artist: "RYLLZ",
+    url: "https://deep.is-a.dev/audios/Warrior.mp3"
   }
 ];
