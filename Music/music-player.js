@@ -66,9 +66,10 @@ const MusicPlayer = (() => {
     try {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       analyser = audioCtx.createAnalyser();
-      // Larger fftSize = more frequency bins = better resolution across all bars
-      analyser.fftSize = 2048;
-      analyser.smoothingTimeConstant = 0.78;
+      analyser.fftSize              = 4096;   // more bins → smoother log mapping
+      analyser.smoothingTimeConstant = 0.80;  // balanced: responsive but not jittery
+      analyser.minDecibels          = -85;    // ignore near-silence noise floor
+      analyser.maxDecibels          = -25;    // cap: bars never fill >~50% on loud music
       freqData = new Uint8Array(analyser.frequencyBinCount);
       analyser.connect(audioCtx.destination);
     } catch (e) {
@@ -164,6 +165,7 @@ const MusicPlayer = (() => {
     if (!webAudioReady || !analyser || !freqData) return null;
     analyser.getByteFrequencyData(freqData);
 
+    // Check if there's actual audio data
     let hasData = false;
     for (let i = 0; i < freqData.length; i++) {
       if (freqData[i] > 0) { hasData = true; break; }
@@ -171,34 +173,38 @@ const MusicPlayer = (() => {
     if (!hasData) return null;
 
     const nyquist = audioCtx.sampleRate / 2;
-    const minFreq = 80;
+    // 60 Hz – 16 kHz covers all musical content; log scale = natural perceptual spacing
+    const minFreq = 60;
     const maxFreq = 16000;
     const minLog  = Math.log10(minFreq);
     const maxLog  = Math.log10(maxFreq);
 
-    const raw = new Float32Array(BAR_COUNT);
+    // --- fast attack, slow release per-bar smoothing ---
+    // barCurrent[] is our smoothed output; we update it here instead of drawWave
     for (let i = 0; i < BAR_COUNT; i++) {
-      const freqLo = Math.pow(10, minLog + (i     / BAR_COUNT) * (maxLog - minLog));
-      const freqHi = Math.pow(10, minLog + ((i+1) / BAR_COUNT) * (maxLog - minLog));
-      const binLo  = Math.floor(freqLo / nyquist * freqData.length);
-      const binHi  = Math.ceil (freqHi / nyquist * freqData.length);
-      const lo     = Math.max(0, Math.min(freqData.length - 1, binLo));
-      const hi     = Math.max(lo + 1, Math.min(freqData.length, binHi));
-      let sum = 0;
-      for (let b = lo; b < hi; b++) sum += freqData[b];
-      raw[i] = (sum / (hi - lo)) / 255;
-    }
+      const freqLo = Math.pow(10, minLog + (i       / BAR_COUNT) * (maxLog - minLog));
+      const freqHi = Math.pow(10, minLog + ((i + 1) / BAR_COUNT) * (maxLog - minLog));
+      const binLo  = Math.max(0, Math.min(freqData.length - 1, Math.floor(freqLo / nyquist * freqData.length)));
+      const binHi  = Math.max(binLo + 1, Math.min(freqData.length, Math.ceil(freqHi / nyquist * freqData.length)));
 
-    // Per-bar gain: tame bass, lift treble
-    const values = new Float32Array(BAR_COUNT);
-    for (let i = 0; i < BAR_COUNT; i++) {
+      let sum = 0;
+      for (let b = binLo; b < binHi; b++) sum += freqData[b];
+      const raw = (sum / (binHi - binLo)) / 255;
+
+      // Perceptual gain: bass slightly tamed, mids neutral, treble slightly boosted
       const t    = i / (BAR_COUNT - 1);
-      const gain = 0.55 + t * 1.05;
-      values[i]  = Math.min(1, raw[i] * gain);
+      const gain = 0.60 + t * 0.85;  // 0.60 at bass → 1.45 at treble
+      const target = Math.min(1, raw * gain);
+
+      // Fast attack (snap up), slow release (fall gracefully)
+      if (target > barCurrent[i]) {
+        barCurrent[i] += (target - barCurrent[i]) * 0.60;  // fast attack
+      } else {
+        barCurrent[i] += (target - barCurrent[i]) * 0.15;  // slow release
+      }
     }
 
     // ── Beat detection from raw bass bins (60–180 Hz) ──
-    // We read directly from freqData so gain adjustments don't affect detection.
     const bassLo  = Math.floor(60  / nyquist * freqData.length);
     const bassHi  = Math.ceil (180 / nyquist * freqData.length);
     let bassSum = 0, bassCount = 0;
@@ -207,26 +213,18 @@ const MusicPlayer = (() => {
     }
     const bassRMS = bassCount > 0 ? (bassSum / bassCount) / 255 : 0;
 
-    // Smooth energy tracker (slow rise, fast fall — like a compressor)
     beatEnergy = beatEnergy * 0.85 + bassRMS * 0.15;
-    beatPeak   = beatPeak   * 0.992 + beatEnergy * 0.008; // very slow peak follower
+    beatPeak   = beatPeak   * 0.992 + beatEnergy * 0.008;
 
-    // Fire a beat when instantaneous energy exceeds the local average by threshold
     if (beatCooldown > 0) beatCooldown--;
     const threshold = beatPeak * 1.35 + 0.08;
     if (bassRMS > threshold && beatCooldown === 0) {
       beatGlow     = Math.min(1, beatGlow + 0.75 + bassRMS * 0.5);
-      beatCooldown = 8; // ~133ms at 60fps — prevents double-firing
+      beatCooldown = 8;
     }
 
-    // Glow decays naturally each frame (handled in drawWave)
-    return values;
+    return barCurrent; // already smoothed in-place
   }
-
-  /* ── Peak dot state (one per bar) ── */
-  const peakVal  = new Float32Array(BAR_COUNT);
-  const peakHold = new Int32Array(BAR_COUNT);
-  const peakDrop = new Float32Array(BAR_COUNT);
 
   /* ── Draw wave ── */
   function drawWave(now) {
@@ -259,9 +257,9 @@ const MusicPlayer = (() => {
       let v;
 
       if (realValues) {
-        barCurrent[i] += (realValues[i] - barCurrent[i]) * 0.35;
-        v = barCurrent[i];
-        v += Math.sin(phase * barSpeed[i] * 2 + barPhase[i]) * 0.02;
+        // smoothing already applied inside getFreqValues() — use directly
+        v = realValues[i];
+        v += Math.sin(phase * barSpeed[i] * 2 + barPhase[i]) * 0.008; // tiny shimmer only
       } else {
         barCurrent[i] += (barTarget[i] - barCurrent[i]) * smoothSpeed;
         v = barCurrent[i];
@@ -280,7 +278,7 @@ const MusicPlayer = (() => {
 
       v = Math.max(0.03, Math.min(1, v));
 
-      const barH = Math.max(2, v * H * (playing ? 0.40 : 0.34));
+      const barH = Math.max(2, v * H * (playing ? 0.45 : 0.40));
       const x    = i * (barW + gap);
       const y    = (H - barH) / 2;
       const r    = Math.min(rad, barH / 2);
@@ -288,9 +286,9 @@ const MusicPlayer = (() => {
       const alpha = playing ? 0.55 + v * 0.45 : 0.30 + v * 0.40;
       ctx.fillStyle = `rgba(255,255,255,${alpha})`;
 
-      if (playing && v > 0.7) {
-        ctx.shadowColor = `rgba(255,255,255,${(v - 0.7) * 0.3})`;
-        ctx.shadowBlur  = 4 + v * 8;
+      if (playing && v > 0.72) {
+        ctx.shadowColor = `rgba(255,255,255,${(v - 0.72) * 0.25})`;
+        ctx.shadowBlur  = 3 + v * 7;
       } else {
         ctx.shadowBlur = 0;
       }
@@ -307,29 +305,6 @@ const MusicPlayer = (() => {
       ctx.arcTo(x,        y,        x + r, y,               r);
       ctx.closePath();
       ctx.fill();
-
-      // Peak dot — only when real audio data is present
-      if (realValues) {
-        if (v >= peakVal[i]) {
-          peakVal[i]  = v;
-          peakHold[i] = 20;
-          peakDrop[i] = 0;
-        } else if (peakHold[i] > 0) {
-          peakHold[i]--;
-        } else {
-          peakDrop[i] += 0.0015;
-          peakVal[i]   = Math.max(0, peakVal[i] - peakDrop[i]);
-        }
-        if (peakVal[i] > 0.05) {
-          ctx.shadowBlur = 0;
-          const pH = peakVal[i] * H * 0.40;
-          const pY = (H - pH) / 2 - 2;
-          ctx.fillStyle = `rgba(255,255,255,${0.45 + peakVal[i] * 0.45})`;
-          ctx.fillRect(x, pY, barW, 1.5);
-        }
-      } else {
-        peakVal[i] = 0; peakHold[i] = 0; peakDrop[i] = 0;
-      }
     }
 
     ctx.shadowBlur = 0;
