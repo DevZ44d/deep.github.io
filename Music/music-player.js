@@ -281,7 +281,7 @@ const MusicPlayer = (() => {
       v = Math.max(0.03, Math.min(1, v));
 
       // Cap max height: 45% playing, 40% idle — bars never fill the strip
-      const barH = Math.max(2, v * H * (playing ? 0.45 : 0.40));
+      const barH = Math.max(2, v * H * (playing ? 0.75 : 0.70));
       const x    = i * (barW + gap);
       const y    = (H - barH) / 2;
       const r    = Math.min(rad, barH / 2);
