@@ -66,9 +66,10 @@ const MusicPlayer = (() => {
     try {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       analyser = audioCtx.createAnalyser();
-      // Larger fftSize = more frequency bins = better resolution across all bars
-      analyser.fftSize = 2048;
-      analyser.smoothingTimeConstant = 0.78;
+      analyser.fftSize = 4096;                  // High resolution bins
+      analyser.smoothingTimeConstant = 0.82;    // Smooth but responsive
+      analyser.minDecibels = -85;               // Tighter dB range → bars don't spike too high
+      analyser.maxDecibels = -20;               // Keeps bars moderate in height
       freqData = new Uint8Array(analyser.frequencyBinCount);
       analyser.connect(audioCtx.destination);
     } catch (e) {
@@ -171,15 +172,16 @@ const MusicPlayer = (() => {
     if (!hasData) return null;
 
     const nyquist = audioCtx.sampleRate / 2;
-    const minFreq = 80;
-    const maxFreq = 16000;
+    // Focus on the musically meaningful range: 60 Hz – 14 kHz
+    const minFreq = 60;
+    const maxFreq = 14000;
     const minLog  = Math.log10(minFreq);
     const maxLog  = Math.log10(maxFreq);
 
     const raw = new Float32Array(BAR_COUNT);
     for (let i = 0; i < BAR_COUNT; i++) {
-      const freqLo = Math.pow(10, minLog + (i     / BAR_COUNT) * (maxLog - minLog));
-      const freqHi = Math.pow(10, minLog + ((i+1) / BAR_COUNT) * (maxLog - minLog));
+      const freqLo = Math.pow(10, minLog + (i       / BAR_COUNT) * (maxLog - minLog));
+      const freqHi = Math.pow(10, minLog + ((i + 1) / BAR_COUNT) * (maxLog - minLog));
       const binLo  = Math.floor(freqLo / nyquist * freqData.length);
       const binHi  = Math.ceil (freqHi / nyquist * freqData.length);
       const lo     = Math.max(0, Math.min(freqData.length - 1, binLo));
@@ -189,16 +191,21 @@ const MusicPlayer = (() => {
       raw[i] = (sum / (hi - lo)) / 255;
     }
 
-    // Per-bar gain: tame bass, lift treble
+    // Perceptual gain curve:
+    //   bass   (i < 0.20): slight cut   — bass bins are naturally loud
+    //   mid    (0.20-0.65): neutral
+    //   treble (i > 0.65): gentle boost — high freqs are naturally quiet
     const values = new Float32Array(BAR_COUNT);
     for (let i = 0; i < BAR_COUNT; i++) {
-      const t    = i / (BAR_COUNT - 1);
-      const gain = 0.55 + t * 1.05;
-      values[i]  = Math.min(1, raw[i] * gain);
+      const t = i / (BAR_COUNT - 1);
+      let gain;
+      if      (t < 0.20) gain = 0.55 + t * 0.80;          // bass: 0.55 → 0.71
+      else if (t < 0.65) gain = 0.71 + (t - 0.20) * 0.60; // mid:  0.71 → 0.98
+      else               gain = 0.98 + (t - 0.65) * 1.20; // treble: 0.98 → 1.38
+      values[i] = Math.min(1, raw[i] * gain);
     }
 
     // ── Beat detection from raw bass bins (60–180 Hz) ──
-    // We read directly from freqData so gain adjustments don't affect detection.
     const bassLo  = Math.floor(60  / nyquist * freqData.length);
     const bassHi  = Math.ceil (180 / nyquist * freqData.length);
     let bassSum = 0, bassCount = 0;
@@ -207,23 +214,27 @@ const MusicPlayer = (() => {
     }
     const bassRMS = bassCount > 0 ? (bassSum / bassCount) / 255 : 0;
 
-    // Smooth energy tracker (slow rise, fast fall — like a compressor)
     beatEnergy = beatEnergy * 0.85 + bassRMS * 0.15;
-    beatPeak   = beatPeak   * 0.992 + beatEnergy * 0.008; // very slow peak follower
+    beatPeak   = beatPeak   * 0.992 + beatEnergy * 0.008;
 
-    // Fire a beat when instantaneous energy exceeds the local average by threshold
     if (beatCooldown > 0) beatCooldown--;
     const threshold = beatPeak * 1.35 + 0.08;
     if (bassRMS > threshold && beatCooldown === 0) {
       beatGlow     = Math.min(1, beatGlow + 0.75 + bassRMS * 0.5);
-      beatCooldown = 8; // ~133ms at 60fps — prevents double-firing
+      beatCooldown = 8;
     }
 
-    // Glow decays naturally each frame (handled in drawWave)
     return values;
   }
 
   /* ── Draw wave ── */
+  // Peak dot state — each bar has an independent falling peak marker
+  const peakY       = new Float32Array(BAR_COUNT).fill(0); // current peak value 0-1
+  const peakVel     = new Float32Array(BAR_COUNT).fill(0); // fall velocity
+  const PEAK_GRAVITY = 0.0012;  // how fast peak falls
+  const PEAK_HOLD    = 18;      // frames before peak starts dropping
+  const peakHold     = new Int32Array(BAR_COUNT).fill(0);
+
   function drawWave(now) {
     const canvas = document.getElementById("mp-wave-bar");
     if (!canvas) { animId = requestAnimationFrame(drawWave); return; }
@@ -235,10 +246,12 @@ const MusicPlayer = (() => {
     const barW = (W - gap * (BAR_COUNT - 1)) / BAR_COUNT;
     const rad  = barW / 2;
 
+    // MAX bar height: 42% of canvas height (keeps bars low, elegant)
+    const MAX_BAR_RATIO = 0.42;
+
     ctx.clearRect(0, 0, W, H);
     phase += playing ? 0.06 : 0.032;
 
-    // Decay beat glow every frame
     if (playing) {
       beatGlow = Math.max(0, beatGlow - 0.045);
     } else {
@@ -254,9 +267,16 @@ const MusicPlayer = (() => {
       let v;
 
       if (realValues) {
-        barCurrent[i] += (realValues[i] - barCurrent[i]) * 0.35;
+        // Fast attack (0.55), slow release (0.18) — punchy feel
+        const target = realValues[i];
+        if (target > barCurrent[i]) {
+          barCurrent[i] += (target - barCurrent[i]) * 0.55;
+        } else {
+          barCurrent[i] += (target - barCurrent[i]) * 0.18;
+        }
         v = barCurrent[i];
-        v += Math.sin(phase * barSpeed[i] * 2 + barPhase[i]) * 0.02;
+        // Tiny shimmer only — doesn't inflate bar height
+        v += Math.sin(phase * barSpeed[i] * 2 + barPhase[i]) * 0.008;
       } else {
         barCurrent[i] += (barTarget[i] - barCurrent[i]) * smoothSpeed;
         v = barCurrent[i];
@@ -275,17 +295,19 @@ const MusicPlayer = (() => {
 
       v = Math.max(0.03, Math.min(1, v));
 
-      const barH = Math.max(2, v * H * (playing ? 0.92 : 0.88));
+      // ── Bars grow from centre, capped at MAX_BAR_RATIO ──
+      const barH = Math.max(2, v * H * MAX_BAR_RATIO);
       const x    = i * (barW + gap);
       const y    = (H - barH) / 2;
       const r    = Math.min(rad, barH / 2);
 
-      const alpha = playing ? 0.55 + v * 0.45 : 0.30 + v * 0.40;
+      const alpha = playing ? 0.50 + v * 0.50 : 0.25 + v * 0.35;
       ctx.fillStyle = `rgba(255,255,255,${alpha})`;
 
-      if (playing && v > 0.5) {
-        ctx.shadowColor = `rgba(255,255,255,${(v - 0.5) * 0.6})`;
-        ctx.shadowBlur  = 8 + v * 18;
+      // Subtle glow only for bars above 60% of their own max
+      if (playing && v > 0.6) {
+        ctx.shadowColor = `rgba(255,255,255,${(v - 0.6) * 0.35})`;
+        ctx.shadowBlur  = 4 + v * 8;
       } else {
         ctx.shadowBlur = 0;
       }
@@ -302,6 +324,38 @@ const MusicPlayer = (() => {
       ctx.arcTo(x,        y,        x + r, y,               r);
       ctx.closePath();
       ctx.fill();
+
+      // ── Peak dot (only when real audio is playing) ──
+      if (realValues && playing) {
+        if (v >= peakY[i]) {
+          peakY[i]   = v;
+          peakHold[i] = PEAK_HOLD;
+          peakVel[i]  = 0;
+        } else {
+          if (peakHold[i] > 0) {
+            peakHold[i]--;
+          } else {
+            peakVel[i]  += PEAK_GRAVITY;
+            peakY[i]    = Math.max(0, peakY[i] - peakVel[i]);
+          }
+        }
+
+        if (peakY[i] > 0.04) {
+          ctx.shadowBlur = 0;
+          const dotH    = peakY[i] * H * MAX_BAR_RATIO;
+          const dotY    = (H - dotH) / 2 - 2; // 2px gap above bar top
+          const dotAlpha = 0.55 + peakY[i] * 0.45;
+          ctx.fillStyle = `rgba(255,255,255,${dotAlpha})`;
+          ctx.beginPath();
+          ctx.roundRect(x, dotY, barW, 1.5, 0.75);
+          ctx.fill();
+        }
+      } else {
+        // Reset peaks when paused
+        peakY[i]    = 0;
+        peakVel[i]  = 0;
+        peakHold[i] = 0;
+      }
     }
 
     ctx.shadowBlur = 0;
