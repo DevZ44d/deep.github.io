@@ -66,10 +66,13 @@ const MusicPlayer = (() => {
     try {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       analyser = audioCtx.createAnalyser();
-      analyser.fftSize              = 4096;   // more bins → smoother log mapping
-      analyser.smoothingTimeConstant = 0.80;  // balanced: responsive but not jittery
-      analyser.minDecibels          = -85;    // ignore near-silence noise floor
-      analyser.maxDecibels          = -25;    // cap: bars never fill >~50% on loud music
+      analyser.fftSize               = 2048;
+      analyser.smoothingTimeConstant = 0.80;
+      // KEY: these two lines control bar height.
+      // Without them the browser uses -100 to 0 dB, filling bars to 255 instantly.
+      // -85 to -20 means only real musical energy shows; loud music peaks at ~55% height.
+      analyser.minDecibels           = -85;
+      analyser.maxDecibels           = -20;
       freqData = new Uint8Array(analyser.frequencyBinCount);
       analyser.connect(audioCtx.destination);
     } catch (e) {
@@ -81,13 +84,14 @@ const MusicPlayer = (() => {
 
   function connectAudioSource() {
     if (!audioCtx || !analyser || !audio) return;
-    if (source) return;
+    if (source) return; // already connected — MediaElementSource can only be created once per element
     try {
       source = audioCtx.createMediaElementSource(audio);
       source.connect(analyser);
       webAudioReady = true;
     } catch (e) {
       console.warn("[MusicPlayer] createMediaElementSource failed:", e);
+      // This happens if crossOrigin isn't set before src is loaded — audio element is re-created in loadSong
       webAudioReady = false;
     }
   }
@@ -161,11 +165,14 @@ const MusicPlayer = (() => {
   }
 
   /* ── Real frequency values from AnalyserNode (logarithmic scale) ── */
+  // Separate smoothed buffer so drawWave idle path is unaffected
+  const barSmoothed = new Float32Array(BAR_COUNT);
+
   function getFreqValues() {
     if (!webAudioReady || !analyser || !freqData) return null;
     analyser.getByteFrequencyData(freqData);
 
-    // Check if there's actual audio data
+    // Confirm actual audio energy exists
     let hasData = false;
     for (let i = 0; i < freqData.length; i++) {
       if (freqData[i] > 0) { hasData = true; break; }
@@ -173,49 +180,44 @@ const MusicPlayer = (() => {
     if (!hasData) return null;
 
     const nyquist = audioCtx.sampleRate / 2;
-    // 60 Hz – 16 kHz covers all musical content; log scale = natural perceptual spacing
-    const minFreq = 60;
-    const maxFreq = 16000;
-    const minLog  = Math.log10(minFreq);
-    const maxLog  = Math.log10(maxFreq);
+    // 60 Hz → 16 kHz in log scale — covers all musical content naturally
+    const minLog = Math.log10(60);
+    const maxLog = Math.log10(16000);
 
-    // --- fast attack, slow release per-bar smoothing ---
-    // barCurrent[] is our smoothed output; we update it here instead of drawWave
     for (let i = 0; i < BAR_COUNT; i++) {
-      const freqLo = Math.pow(10, minLog + (i       / BAR_COUNT) * (maxLog - minLog));
-      const freqHi = Math.pow(10, minLog + ((i + 1) / BAR_COUNT) * (maxLog - minLog));
-      const binLo  = Math.max(0, Math.min(freqData.length - 1, Math.floor(freqLo / nyquist * freqData.length)));
-      const binHi  = Math.max(binLo + 1, Math.min(freqData.length, Math.ceil(freqHi / nyquist * freqData.length)));
+      // Map each bar to its frequency range logarithmically
+      const fLo  = Math.pow(10, minLog + (i       / BAR_COUNT) * (maxLog - minLog));
+      const fHi  = Math.pow(10, minLog + ((i + 1) / BAR_COUNT) * (maxLog - minLog));
+      const bLo  = Math.max(0, Math.min(freqData.length - 1, Math.round(fLo / nyquist * freqData.length)));
+      const bHi  = Math.max(bLo + 1, Math.min(freqData.length, Math.round(fHi / nyquist * freqData.length)));
 
+      // Average the bins in this band
       let sum = 0;
-      for (let b = binLo; b < binHi; b++) sum += freqData[b];
-      const raw = (sum / (binHi - binLo)) / 255;
+      for (let b = bLo; b < bHi; b++) sum += freqData[b];
+      const raw = (sum / (bHi - bLo)) / 255; // 0..1
 
-      // Perceptual gain: bass slightly tamed, mids neutral, treble slightly boosted
-      const t    = i / (BAR_COUNT - 1);
-      const gain = 0.60 + t * 0.85;  // 0.60 at bass → 1.45 at treble
+      // Gentle perceptual curve: bass tamed slightly, treble lifted slightly
+      const t      = i / (BAR_COUNT - 1);
+      const gain   = 0.65 + t * 0.80;        // 0.65 (bass) → 1.45 (treble)
       const target = Math.min(1, raw * gain);
 
-      // Fast attack (snap up), slow release (fall gracefully)
-      if (target > barCurrent[i]) {
-        barCurrent[i] += (target - barCurrent[i]) * 0.60;  // fast attack
+      // Fast attack (snappy on beats), slow release (graceful fall)
+      if (target > barSmoothed[i]) {
+        barSmoothed[i] += (target - barSmoothed[i]) * 0.65;
       } else {
-        barCurrent[i] += (target - barCurrent[i]) * 0.15;  // slow release
+        barSmoothed[i] += (target - barSmoothed[i]) * 0.12;
       }
     }
 
-    // ── Beat detection from raw bass bins (60–180 Hz) ──
-    const bassLo  = Math.floor(60  / nyquist * freqData.length);
-    const bassHi  = Math.ceil (180 / nyquist * freqData.length);
-    let bassSum = 0, bassCount = 0;
-    for (let b = bassLo; b < bassHi && b < freqData.length; b++) {
-      bassSum += freqData[b]; bassCount++;
-    }
-    const bassRMS = bassCount > 0 ? (bassSum / bassCount) / 255 : 0;
+    // ── Beat detection (bass 60–180 Hz) ──
+    const bassLo = Math.round(60  / nyquist * freqData.length);
+    const bassHi = Math.round(180 / nyquist * freqData.length);
+    let bSum = 0, bCnt = 0;
+    for (let b = bassLo; b < bassHi && b < freqData.length; b++) { bSum += freqData[b]; bCnt++; }
+    const bassRMS = bCnt > 0 ? (bSum / bCnt) / 255 : 0;
 
     beatEnergy = beatEnergy * 0.85 + bassRMS * 0.15;
     beatPeak   = beatPeak   * 0.992 + beatEnergy * 0.008;
-
     if (beatCooldown > 0) beatCooldown--;
     const threshold = beatPeak * 1.35 + 0.08;
     if (bassRMS > threshold && beatCooldown === 0) {
@@ -223,7 +225,7 @@ const MusicPlayer = (() => {
       beatCooldown = 8;
     }
 
-    return barCurrent; // already smoothed in-place
+    return barSmoothed; // already smoothed — drawWave uses directly
   }
 
   /* ── Draw wave ── */
@@ -257,9 +259,9 @@ const MusicPlayer = (() => {
       let v;
 
       if (realValues) {
-        // smoothing already applied inside getFreqValues() — use directly
+        // Already smoothed in getFreqValues — use directly, tiny shimmer only
         v = realValues[i];
-        v += Math.sin(phase * barSpeed[i] * 2 + barPhase[i]) * 0.008; // tiny shimmer only
+        v += Math.sin(phase * barSpeed[i] * 2 + barPhase[i]) * 0.008;
       } else {
         barCurrent[i] += (barTarget[i] - barCurrent[i]) * smoothSpeed;
         v = barCurrent[i];
@@ -278,6 +280,7 @@ const MusicPlayer = (() => {
 
       v = Math.max(0.03, Math.min(1, v));
 
+      // Cap max height: 45% playing, 40% idle — bars never fill the strip
       const barH = Math.max(2, v * H * (playing ? 0.45 : 0.40));
       const x    = i * (barW + gap);
       const y    = (H - barH) / 2;
@@ -286,9 +289,10 @@ const MusicPlayer = (() => {
       const alpha = playing ? 0.55 + v * 0.45 : 0.30 + v * 0.40;
       ctx.fillStyle = `rgba(255,255,255,${alpha})`;
 
-      if (playing && v > 0.72) {
-        ctx.shadowColor = `rgba(255,255,255,${(v - 0.72) * 0.25})`;
-        ctx.shadowBlur  = 3 + v * 7;
+      // Glow only on loud real bars, much softer than before
+      if (playing && realValues && v > 0.70) {
+        ctx.shadowColor = `rgba(255,255,255,${(v - 0.70) * 0.28})`;
+        ctx.shadowBlur  = 3 + v * 6;
       } else {
         ctx.shadowBlur = 0;
       }
