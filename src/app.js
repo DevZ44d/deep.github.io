@@ -17,11 +17,6 @@ const profileImages = [
 
 const cacheBuster = Date.now();
 
-profileImages.forEach((imageName) => {
-    const imgCache = new Image();
-    imgCache.src = `profiles/${imageName}?v=${cacheBuster}`;
-});
-
 const randomIndex = Math.floor(Math.random() * profileImages.length);
 const selectedImage = profileImages[randomIndex];
 
