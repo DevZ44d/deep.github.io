@@ -4,14 +4,13 @@
 
 **AhMed's personal developer portfolio** — a dark, animated single-page site live at **[deep.is-a.dev](https://deep.is-a.dev)**
 
-[![Live Site](https://img.shields.io/badge/Live-deep.is--a.dev-6c6868?style=for-the-badge&logo=googlechrome&logoColor=white)](https://deep.is-a.dev)
-[![GitHub Pages](https://img.shields.io/badge/Hosted%20on-GitHub%20Pages-181717?style=for-the-badge&logo=github&logoColor=white)](https://pages.github.com/)
-
+[![Live Site](https://img.shields.io/badge/Live-deep.is--a.dev-2ea44f?style=flat-square&logo=googlechrome&logoColor=white)](https://deep.is-a.dev)
+[![GitHub Pages](https://img.shields.io/badge/Hosted%20on-GitHub%20Pages-181717?style=flat-square&logo=github&logoColor=white)](https://pages.github.com/)
 [![Stars](https://img.shields.io/github/stars/DevZ44d/deep.github.io?style=flat-square&color=yellow)](https://github.com/DevZ44d/deep.github.io/stargazers)
-[![Forks](https://img.shields.io/github/forks/DevZ44d/deep.github.io?style=flat-square&color=blue)](https://github.com/DevZ44d/deep.github.io/forks)
-[![Last Commit](https://img.shields.io/github/last-commit/DevZ44d/deep.github.io?style=flat-square)](https://github.com/DevZ44d/deep.github.io/commits/main)
-[![Repo Size](https://img.shields.io/github/repo-size/DevZ44d/deep.github.io?style=flat-square)](https://github.com/DevZ44d/deep.github.io)
-[![Issues](https://img.shields.io/github/issues/DevZ44d/deep.github.io?style=flat-square)](https://github.com/DevZ44d/deep.github.io/issues)
+[![Forks](https://img.shields.io/github/forks/DevZ44d/deep.github.io?style=flat-square&color=orange)](https://github.com/DevZ44d/deep.github.io/forks)
+[![Last Commit](https://img.shields.io/github/last-commit/DevZ44d/deep.github.io?style=flat-square&color=brightgreen)](https://github.com/DevZ44d/deep.github.io/commits/main)
+[![Repo Size](https://img.shields.io/github/repo-size/DevZ44d/deep.github.io?style=flat-square&color=blueviolet)](https://github.com/DevZ44d/deep.github.io)
+[![Issues](https://img.shields.io/github/issues/DevZ44d/deep.github.io?style=flat-square&color=red)](https://github.com/DevZ44d/deep.github.io/issues)
 
 ![HTML](https://img.shields.io/badge/HTML-45.8%25-E34F26?style=flat-square&logo=html5&logoColor=white)
 ![JavaScript](https://img.shields.io/badge/JavaScript-33.8%25-F7DF1E?style=flat-square&logo=javascript&logoColor=black)
