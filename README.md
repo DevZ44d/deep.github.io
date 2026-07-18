@@ -80,7 +80,7 @@ Just visit **[deep.is-a.dev](https://deep.is-a.dev)** — no setup needed.
 ```bash
 git clone https://github.com/DevZ44d/deep.github.io.git
 cd deep.github.io
-pip install flask
+pip install -r requirements.txt
 python main.py
 ```
 
