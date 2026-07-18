@@ -41,6 +41,14 @@ def static_files(filename: str) -> "flask.Response":
     mirrors exactly how GitHub Pages serves the same files in production,
     so what you see locally is what you'll see live.
     """
+    full_path = ROOT_DIR / filename
+
+    # If the request points at a folder (e.g. "/clock/"), serve that
+    # folder's own index.html instead of trying (and failing) to send
+    # the directory itself as a file.
+    if full_path.is_dir():
+        filename = f"{filename.rstrip('/')}/index.html"
+
     return send_from_directory(ROOT_DIR, filename)
 
 
