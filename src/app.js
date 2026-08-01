@@ -11,7 +11,9 @@ const profileImages = [
     "profile_10.jpg",
     "profile_11.jpg",
     "profile_12.jpg",
-    "profile_13.jpg"
+    "profile_13.jpg",
+    "profile_14.jpg",
+    "profile_15.jpg"
 ];
 
 
