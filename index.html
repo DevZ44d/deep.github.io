@@ -174,9 +174,13 @@
                          <h3 class="name"> </h3>
                          <h3 class="name"> </h3>
                          <div class="name-container">
-                              <h3 class="bold-name">- AhMeD</h3>
-                              <img class="verify-badge" src="assets/verifyed.png" alt="Verified" width="22" height="22"
-                                   draggable="false" />
+                              <h3 class="bold-name">- Да?</h3>
+                              <a href="https://t.me/nft/PreciousPeach-595" target="_blank" rel="noopener" class="gift-badge">
+                                   <span class="gift-label">
+                                        <span class="gift-label-text">Precious Peach #595</span>
+                                   </span>
+                                   <div id="gift-lottie" class="gift-lottie"></div>
+                              </a>
                          </div>
                     </div>
                </div>
@@ -263,6 +267,68 @@
      <script form_worker_url="https://linuxguy312.contactform-d0b.workers.dev/" src="/contactform/contact-form.js"
           error_text="" success_text="" disable_waittime="true" id="contactform">
           </script>
+
+     <script src="src/lottie.min.js"></script>
+     <script>
+          (function () {
+               function playGift() {
+                    var container = document.getElementById("gift-lottie");
+                    if (!container || typeof lottie === "undefined") {
+                         setTimeout(playGift, 80);
+                         return;
+                    }
+                    lottie.loadAnimation({
+                         container: container,
+                         renderer: "svg",
+                         loop: true,
+                         autoplay: true,
+                         path: "assets/PreciousPeach.json"
+                    });
+               }
+
+               function showLabelAfterLoader() {
+                    var label = document.querySelector(".gift-label");
+                    var loader = document.getElementById("loader");
+                    if (!label) return;
+
+                    function reveal() {
+                         label.classList.add("show");
+                         setTimeout(function () {
+                              label.classList.remove("show");
+                         }, 5000);
+                    }
+
+                    if (!loader || parseFloat(getComputedStyle(loader).opacity) === 0 || loader.style.opacity === "0") {
+                         setTimeout(reveal, 400);
+                         return;
+                    }
+
+                    var observer = new MutationObserver(function () {
+                         if (parseFloat(getComputedStyle(loader).opacity) < 0.15 || loader.style.opacity === "0") {
+                              observer.disconnect();
+                              setTimeout(reveal, 450);
+                         }
+                    });
+                    observer.observe(loader, { attributes: true, attributeFilter: ["style", "class"] });
+
+                    setTimeout(function () {
+                         observer.disconnect();
+                         if (!label.classList.contains("show")) reveal();
+                    }, 6000);
+               }
+
+               function init() {
+                    playGift();
+                    showLabelAfterLoader();
+               }
+
+               if (document.readyState === "loading") {
+                    document.addEventListener("DOMContentLoaded", init);
+               } else {
+                    init();
+               }
+          })();
+     </script>
 </body>
 
 </html>
