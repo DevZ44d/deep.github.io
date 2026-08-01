@@ -120,7 +120,6 @@ h1:hover {
     display: none;
 }
 
-
 .header{
     position: relative;
     height: 265px;
@@ -129,7 +128,6 @@ h1:hover {
     clip-path: ellipse(80% 100% at 50% 0%);
     -webkit-clip-path: ellipse(80% 100% at 50% 0%);
 }
-
 
 .tgme_gift_preview {
     position: absolute;
@@ -814,7 +812,7 @@ h1:hover {
     position: absolute;
     top: 10px;
     width: 1.5px;
-    height: 1,5px;
+    height: 1.5px;
     background-color: #efeeda;
     border-radius: 100%;
     border: 2.5px solid #dee1c5;
@@ -861,6 +859,7 @@ h1:hover {
     }
 }
 
+/* ========== Name + Gift Badge (Telegram style) ========== */
 
 .name-container {
     display: flex !important;
@@ -870,6 +869,14 @@ h1:hover {
     margin-top: 5px !important;
 }
 
+.bold-name {
+    color: #ffffff !important;
+    font-size: 1.2rem !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+    margin: 5px 0 !important;
+    transition: .3s !important;
+}
 
 .verify-badge {
     color: #0097ec !important;
@@ -877,11 +884,105 @@ h1:hover {
     display: inline-block !important;
 }
 
-.bold-name {
-    color: #fff;
-    font-size: 1.2rem;
-    font-weight: 700;
-    line-height: 1;
-    margin: 5px 0;
-    transition: .3s;
+.gift-badge {
+    display: inline-flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    width: 30px !important;
+    height: 30px !important;
+    flex-shrink: 0 !important;
+    overflow: visible !important;
+    line-height: 0 !important;
+    position: relative !important;
+    top: 1px !important;
+    text-decoration: none !important;
+    border: none !important;
+    background: transparent !important;
+    cursor: pointer !important;
+    transition: transform 0.2s ease !important;
+}
+
+.gift-badge .gift-lottie {
+    width: 30px !important;
+    height: 30px !important;
+    display: block !important;
+    position: relative !important;
+    z-index: 1 !important;
+}
+
+.gift-badge .gift-lottie svg {
+    width: 30px !important;
+    height: 30px !important;
+    display: block !important;
+    overflow: visible !important;
+}
+
+/* Gift name label */
+.gift-label {
+    position: absolute !important;
+    bottom: calc(100% + 4px) !important;
+    left: 50% !important;
+    transform: translateX(-50%) translateY(4px) !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    white-space: nowrap !important;
+    z-index: 50 !important;
+    transition: opacity 0.3s ease, transform 0.3s ease !important;
+}
+
+/* Show on hover OR when auto-shown */
+.gift-badge:hover .gift-label,
+.gift-label.show {
+    opacity: 1 !important;
+    transform: translateX(-50%) translateY(0) !important;
+}
+
+.gift-label-text {
+    display: block !important;
+    position: relative !important;
+    color: #ffffff !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.01em !important;
+    line-height: 1 !important;
+    padding: 4px 10px !important;
+    border-radius: 999px !important;
+    background-color: #1c1c1e !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5) !important;
+    border: 1px solid transparent !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    overflow: hidden !important;
+    z-index: 2 !important;
+
+    /* الوميض من الشمال لليمين على الحافة فقط */
+    background-image:
+        linear-gradient(#1c1c1e, #1c1c1e),
+        linear-gradient(
+            90deg,
+            transparent 0%,
+            transparent 20%,
+            rgba(255, 255, 255, 0.85) 50%,
+            transparent 80%,
+            transparent 100%
+        ) !important;
+    background-origin: border-box !important;
+    background-clip: padding-box, border-box !important;
+    background-size: 100% 100%, 200% 100% !important;
+    animation: gift-shine-sweep 2.2s linear infinite !important;
+}
+
+@keyframes gift-shine-sweep {
+    0% {
+        background-position: 0 0, 100% 0;
+    }
+    100% {
+        background-position: 0 0, -100% 0;
+    }
+}
+
+.gift-badge:hover {
+    transform: scale(1.12) !important;
 }
