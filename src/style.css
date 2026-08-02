@@ -919,9 +919,12 @@ h1:hover {
 }
 
 /* Gift name label */
+/* Gift name label */
+/* Gift name label */
+/* Gift name label */
 .gift-label {
     position: absolute !important;
-    bottom: calc(100% + 4px) !important;
+    bottom: calc(100% + 8px) !important;
     left: 50% !important;
     transform: translateX(-50%) translateY(4px) !important;
     opacity: 0 !important;
@@ -957,14 +960,14 @@ h1:hover {
     overflow: hidden !important;
     z-index: 2 !important;
 
-    /* الوميض من الشمال لليمين على الحافة فقط */
+    /* الوميض من الشمال لليمين على الشريط */
     background-image:
         linear-gradient(#1c1c1e, #1c1c1e),
         linear-gradient(
             90deg,
             transparent 0%,
             transparent 20%,
-            rgba(255, 255, 255, 0.85) 50%,
+            rgba(255, 255, 255, 0.9) 50%,
             transparent 80%,
             transparent 100%
         ) !important;
@@ -974,12 +977,59 @@ h1:hover {
     animation: gift-shine-sweep 2.2s linear infinite !important;
 }
 
+/* السهم المتجه للهديه */
+.gift-label::after {
+    content: "" !important;
+    position: absolute !important;
+    left: 50% !important;
+    bottom: -6px !important;
+    transform: translateX(-50%) !important;
+    width: 0 !important;
+    height: 0 !important;
+    border-left: 6px solid transparent !important;
+    border-right: 6px solid transparent !important;
+    border-top: 6px solid #1c1c1e !important;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.25)) !important;
+    z-index: 3 !important;
+    pointer-events: none !important;
+}
+
+/* وميض خفيف يمشي على السهم */
+.gift-label::before {
+    content: "" !important;
+    position: absolute !important;
+    left: 50% !important;
+    bottom: -6px !important;
+    transform: translateX(-50%) !important;
+    width: 0 !important;
+    height: 0 !important;
+    border-left: 6px solid transparent !important;
+    border-right: 6px solid transparent !important;
+    border-top: 6px solid rgba(255, 255, 255, 0.55) !important;
+    opacity: 0 !important;
+    z-index: 4 !important;
+    pointer-events: none !important;
+    animation: arrow-shine 2.2s linear infinite !important;
+}
+
 @keyframes gift-shine-sweep {
     0% {
         background-position: 0 0, 100% 0;
     }
     100% {
         background-position: 0 0, -100% 0;
+    }
+}
+
+@keyframes arrow-shine {
+    0%, 35% {
+        opacity: 0;
+    }
+    45%, 55% {
+        opacity: 0.7;
+    }
+    65%, 100% {
+        opacity: 0;
     }
 }
 
