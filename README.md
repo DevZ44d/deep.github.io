@@ -39,6 +39,7 @@ This is the source code for **AhMed's (DevZ44d)** personal portfolio site — a 
 - 🔒 **Basic content protection** — right-click and common DevTools shortcuts (F12, Ctrl+Shift+I/J/C, Ctrl+U) are disabled
 - 🌐 **Custom domain** — served via GitHub Pages with a `CNAME` pointing to `deep.is-a.dev`
 - 🐍 **Flask-powered local dev server** — run the whole site locally with hot access to every asset, exactly as it's served in production
+- 🔨 **Giftsmith** — a small OOP Python tool (`giftsmith.py`) that fetches any Telegram collectible gift page, downloads and converts its `.tgs` sticker to `.json`, and auto-swaps the gift badge (link, label, and Lottie animation) shown on the homepage
 
 ## 🛠️ Tech Stack
 
@@ -56,13 +57,15 @@ This is the source code for **AhMed's (DevZ44d)** personal portfolio site — a 
 deep.github.io/
 ├── Music/            # Playlist data, player script and styles
 ├── Symbol/           # Icon set used by the animated gift/symbol card
-├── assets/           # Images, favicon, particles.js library
+├── assets/           # Images, favicon, particles.js library, converted gift .json animations
 ├── audios/           # Audio files used by the music player
 ├── clock/            # Standalone clock sub-page
 ├── contactform/       # Contact form script + Worker integration
 ├── profiles/         # Profile images
 ├── src/              # Core stylesheet (style.css) and app script (app.js)
+├── tgs/              # Raw .tgs stickers downloaded by Giftsmith
 ├── CNAME             # Custom domain config for GitHub Pages
+├── giftsmith.py      # Fetches/converts a Telegram gift and swaps it into index.html
 ├── index.html        # Main landing page
 ├── main.py           # Flask local dev server (serves the full site)
 ├── requirements.txt  # Python dependencies (Flask)
@@ -96,6 +99,15 @@ This spins up a local Flask server at **http://127.0.0.1:5000** serving the exac
 | `--debug` | Enable Flask's auto-reload/debugger |
 
 On Windows, you can also just double-click `open.bat`.
+
+### 🔨 Swap the featured gift with Giftsmith
+
+```bash
+pip install requests
+python giftsmith.py
+```
+
+Paste in any Telegram collectible gift link (e.g. `https://t.me/nft/PreciousPeach-2845`) and it will download the sticker, convert it, and update the badge on `index.html` automatically.
 
 ## 🔗 Connect
 
