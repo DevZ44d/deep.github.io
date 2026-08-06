@@ -151,7 +151,7 @@ class GiftHtmlUpdater:
         r'("\s+target="_blank"\s+rel="noopener"\s+class="gift-badge">)'
     )
     LABEL_PATTERN = re.compile(r'(<span class="gift-label-text">)[^<]+(</span>)')
-    JSON_PATH_PATTERN = re.compile(r'(path:\s*")assets/[^"]+(")')
+    JSON_PATH_PATTERN = re.compile(r'(path:\s*")[^"]+\.json(")')
 
     def __init__(self, html_path: str):
         self.html_path = Path(html_path)
