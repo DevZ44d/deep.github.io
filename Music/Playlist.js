@@ -12,18 +12,24 @@
 const PLAYLIST = [
   {
     id: 1,
+    title: "JESSIE",
+    artist: "riserayss && LONOWN",
+    url: "https://deep.is-a.dev/audios/JESSIE.mp3"
+  },
+  {
+    id: 2,
     title: "HAWARY",
     artist: "Wegz",
     url: "https://deep.is-a.dev/audios/HAWARY.mp3"
   },
   {
-    id: 2,
+    id: 3,
     title: "GATA ONLY",
     artist: "FloyyMenor",
     url: "https://deep.is-a.dev/audios/GATA.mp3"
   },
   {
-    id: 3,
+    id: 4,
     title: "Warrior",
     artist: "RYLLZ",
     url: "https://deep.is-a.dev/audios/Warrior.mp3"
